@@ -61,7 +61,37 @@
         <p>Choose the option that fits you best. You can change this later in Access.</p>
       </div>
 
-      <div id="gtky-category-view" class="gtky-view">
+      <!-- STEP 1: API Key Setup -->
+      <div id="gtky-apikey-view" class="gtky-view">
+        <div class="gtky-card" style="cursor: default; text-align: left; padding: 20px;">
+          <h3 style="margin-bottom: 15px; font-size: 16px;">Step 1: AI Setup</h3>
+          <p style="margin-bottom: 15px; font-size: 13px; color: #666;">
+            To use voice features and descriptions, valid API keys are required.
+            Please enter your keys below.
+          </p>
+
+          <div class="form-group">
+            <label for="onboarding-grok-key">Grok API Key (xAI)</label>
+            <input type="password" id="onboarding-grok-key" class="settings-input" placeholder="Enter Grok API Key">
+          </div>
+
+          <div class="form-group">
+            <label for="onboarding-claude-key">Claude API Key (Anthropic)</label>
+            <input type="password" id="onboarding-claude-key" class="settings-input" placeholder="Enter Claude API Key">
+          </div>
+
+          <button id="onboarding-next-btn" class="btn-primary" style="margin-top: 10px; width: 100%;">
+            Next: Personalize Experience &rarr;
+          </button>
+
+          <p style="margin-top: 10px; font-size: 11px; text-align: center;">
+            <a href="#" id="onboarding-skip-link" style="color: #999;">Skip for now (AI features disabled)</a>
+          </p>
+        </div>
+      </div>
+
+      <!-- STEP 2: Impairment Selection -->
+      <div id="gtky-category-view" class="gtky-view" style="display:none;">
         <div class="gtky-grid">
           <button class="gtky-card" data-gtky-category="visual">
             <span class="gtky-icon">👁️</span>
@@ -107,9 +137,7 @@
         <div class="stt-subtitles-area" id="stt-subtitles-container">
           <div class="stt-empty-state" id="stt-empty-state">Ready to listen. Click Start below.</div>
         </div>
-        <div class="stt-visualizer-wrapper">
-          <canvas id="stt-audio-visualizer" height="60"></canvas>
-        </div>
+
         <button id="stt-toggle-btn" class="btn-action stt-btn">
           <span id="stt-mic-icon">&#x1F3A4;</span>
           <span id="stt-btn-text">Start Listening</span>

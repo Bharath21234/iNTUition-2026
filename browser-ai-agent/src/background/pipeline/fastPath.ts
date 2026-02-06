@@ -57,14 +57,14 @@ const FAST_PATH_RULES: FastPathRule[] = [
 
   // Navigate to URL
   {
-    pattern: /^(?:navigate|go|open)\s+(?:to\s+)?(?:the\s+)?(?:website\s+)?([a-zA-Z0-9][-a-zA-Z0-9]*(?:\.[a-zA-Z0-9][-a-zA-Z0-9]*)+(?:\/\S*)?)$/i,
+    pattern: /^(?:.*?\s+)?(?:navigate|go|open)(?:\s+to)?(?:the\s+)?(?:website\s+)?([a-zA-Z0-9][-a-zA-Z0-9]*(?:\.[a-zA-Z0-9][-a-zA-Z0-9]*)+(?:\/\S*)?)$/i,
     action: 'navigate',
     extractParams: (match) => ({
       url: match[1],
     }),
   },
   {
-    pattern: /^(?:navigate|go|open)\s+(?:to\s+)?(https?:\/\/\S+)$/i,
+    pattern: /^(?:.*?\s+)?(?:navigate|go|open)(?:\s+to)?(https?:\/\/\S+)$/i,
     action: 'navigate',
     extractParams: (match) => ({
       url: match[1],

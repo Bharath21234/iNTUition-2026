@@ -72,6 +72,7 @@
 
   // =============================================
   // SECTION 1.5: GET TO KNOW YOU (ONBOARDING)
+  // Flow: API Key Setup -> Impairment Category -> Detail -> Completed
   // Stores preferences in chrome.storage.sync
   // =============================================
 
@@ -214,7 +215,21 @@
     });
   }
 
+  // --- Onboarding Elements ---
+  var gtkyApiKeyView = document.getElementById('gtky-apikey-view');
+  var onboardingGrokKey = document.getElementById('onboarding-grok-key');
+  var onboardingClaudeKey = document.getElementById('onboarding-claude-key');
+  var onboardingNextBtn = document.getElementById('onboarding-next-btn');
+  var onboardingSkipLink = document.getElementById('onboarding-skip-link');
+
+  function showApiKeyView() {
+    if (gtkyApiKeyView) gtkyApiKeyView.style.display = 'block';
+    if (gtkyCategoryView) gtkyCategoryView.style.display = 'none';
+    if (gtkyDetailView) gtkyDetailView.style.display = 'none';
+  }
+
   function showCategoryView() {
+    if (gtkyApiKeyView) gtkyApiKeyView.style.display = 'none';
     if (gtkyCategoryView) gtkyCategoryView.style.display = 'block';
     if (gtkyDetailView) gtkyDetailView.style.display = 'none';
   }
@@ -238,6 +253,8 @@
         gtkyDetailOptions.appendChild(btn);
       });
     }
+
+    if (gtkyApiKeyView) gtkyApiKeyView.style.display = 'none';
     if (gtkyCategoryView) gtkyCategoryView.style.display = 'none';
     if (gtkyDetailView) gtkyDetailView.style.display = 'block';
   }
@@ -256,13 +273,47 @@
     });
   });
 
+  // --- API Key Setup Logic ---
+  if (onboardingNextBtn) {
+    onboardingNextBtn.addEventListener('click', function () {
+      var grokKey = onboardingGrokKey.value.trim();
+      var claudeKey = onboardingClaudeKey.value.trim();
+
+      var updates = {};
+      if (grokKey) updates.grokApiKey = grokKey;
+      if (claudeKey) updates.apiKey = claudeKey; // 'apiKey' corresponds to Claude/Provider key
+
+      // Save keys if provided
+      if (Object.keys(updates).length > 0) {
+        chrome.storage.local.set(updates, function () {
+          // Reload settings in background/UI to reflect changes
+          if (typeof loadSettings === 'function') {
+            loadSettings();
+          }
+          showCategoryView();
+        });
+      } else {
+        // Just proceed if no keys (user implicitly skipping by clicking Next with empty fields)
+        showCategoryView();
+      }
+    });
+  }
+
+  if (onboardingSkipLink) {
+    onboardingSkipLink.addEventListener('click', function (e) {
+      e.preventDefault();
+      showCategoryView();
+    });
+  }
+
+  // --- Main Logic ---
   chrome.storage.sync.get(['preferences'], function (result) {
     var prefs = result.preferences;
     if (prefs && Object.keys(prefs).length > 0) {
       showAgentTab();
     } else {
       showOnboarding();
-      showCategoryView();
+      showApiKeyView(); // START HERE
     }
   });
 
@@ -390,18 +441,14 @@
   var sttBtnText = document.getElementById('stt-btn-text');
   var sttMicIcon = document.getElementById('stt-mic-icon');
   var sttSubtitlesContainer = document.getElementById('stt-subtitles-container');
-  var sttCanvas = document.getElementById('stt-audio-visualizer');
-  var sttCanvasCtx = sttCanvas.getContext('2d');
   var sttEmptyState = document.getElementById('stt-empty-state');
+
   var sttPermissionModal = document.getElementById('stt-permission-modal');
   var sttFixPermissionBtn = document.getElementById('stt-fix-permission-btn');
 
   var sttIsListening = false;
   var sttRecognition = null;
-  var sttAudioContext = null;
-  var sttAnalyser = null;
-  var sttMicrophoneStream = null;
-  var sttAnimationId = null;
+
   var sttCurrentInterimBubble = null;
 
   // =============================================
@@ -588,58 +635,9 @@
     return r;
   }
 
-  // Visualizer Setup (same as system_mic/sidepanel.js setupVisualizer)
-  async function setupVisualizer() {
-    try {
-      sttMicrophoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      sttAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-      sttAnalyser = sttAudioContext.createAnalyser();
-      var source = sttAudioContext.createMediaStreamSource(sttMicrophoneStream);
-      source.connect(sttAnalyser);
-      sttAnalyser.fftSize = 256;
-      sttAnalyser.smoothingTimeConstant = 0.8;
-      drawVisualizer();
-    } catch (err) {
-      console.error('Visualizer setup denied:', err);
-      if (err.name === 'NotAllowedError') {
-        showSTTPermissionModal();
-      }
-    }
-  }
 
-  // Draw Visualizer (same as system_mic/sidepanel.js drawVisualizer)
-  function drawVisualizer() {
-    if (!sttIsListening) {
-      sttCanvasCtx.clearRect(0, 0, sttCanvas.width, sttCanvas.height);
-      return;
-    }
 
-    sttAnimationId = requestAnimationFrame(drawVisualizer);
 
-    var bufferLength = sttAnalyser.frequencyBinCount;
-    var dataArray = new Uint8Array(bufferLength);
-    sttAnalyser.getByteFrequencyData(dataArray);
-
-    sttCanvasCtx.clearRect(0, 0, sttCanvas.width, sttCanvas.height);
-
-    var centerX = sttCanvas.width / 2;
-    var centerY = sttCanvas.height / 2;
-    var gradient = sttCanvasCtx.createLinearGradient(0, centerY - 50, 0, centerY + 50);
-    gradient.addColorStop(0, '#a78bfa');
-    gradient.addColorStop(1, '#3b82f6');
-    sttCanvasCtx.fillStyle = gradient;
-
-    var barWidth = (sttCanvas.width / bufferLength) * 1.5;
-
-    for (var i = 0; i < bufferLength; i++) {
-      var barHeight = (dataArray[i] / 255) * (sttCanvas.height * 0.4);
-      var x = centerX - (i * barWidth);
-      if (x > 0) {
-        sttCanvasCtx.fillRect(x, centerY - barHeight / 2, barWidth - 1, barHeight);
-        sttCanvasCtx.fillRect(centerX + (i * barWidth), centerY - barHeight / 2, barWidth - 1, barHeight);
-      }
-    }
-  }
 
   // Update STT UI (same as system_mic/sidepanel.js updateUI)
   function updateSTTUI(active) {
@@ -752,7 +750,6 @@
       }
 
       sttRecognition.start();
-      setupVisualizer();
     }
   }
 
@@ -760,27 +757,12 @@
     if (sttIsListening) {
       sttIsListening = false;
       if (sttRecognition) sttRecognition.stop();
-      if (sttAudioContext) {
-        sttAudioContext.close().catch(function () { });
-        sttAudioContext = null;
-      }
-      if (sttMicrophoneStream) {
-        sttMicrophoneStream.getTracks().forEach(function (t) { t.stop(); });
-        sttMicrophoneStream = null;
-      }
-      cancelAnimationFrame(sttAnimationId);
-      sttCanvasCtx.clearRect(0, 0, sttCanvas.width, sttCanvas.height);
       updateSTTUI(false);
     }
   }
 
   // Canvas sizing (same as system_mic/sidepanel.js)
-  function resizeCanvas() {
-    sttCanvas.width = sttCanvas.offsetWidth;
-    sttCanvas.height = sttCanvas.offsetHeight || 60;
-  }
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
+
 
   // Initialize recognition
   sttRecognition = setupRecognition();
