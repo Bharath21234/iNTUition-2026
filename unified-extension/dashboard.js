@@ -202,13 +202,25 @@
     }
   }
 
+  function enableVoiceCommands() {
+    if (!voiceCommandsToggle) return;
+    if (!voiceCommandsToggle.checked) {
+      voiceCommandsToggle.checked = true;
+      voiceCommandsToggle.dispatchEvent(new Event('change'));
+    }
+  }
+
   function saveOnboardingPreferences(prefs, options) {
     chrome.storage.sync.set({ preferences: prefs }, function () {
       updateAccessibilityTogglesFromPrefs(prefs);
       applyAccessibilityToActiveTab();
-      if (options && options.goToVoice) {
+      if (options && (options.enableWorkflow || options.enableCommands)) {
         showVoiceTab();
-        enableVoiceWorkflow();
+        if (options.enableWorkflow) {
+          enableVoiceWorkflow();
+        } else if (options.enableCommands) {
+          enableVoiceCommands();
+        }
       } else {
         showAgentTab();
       }
@@ -248,7 +260,10 @@
           var isBlindnessComplete = option.id === 'blindness-complete';
           var isMotorImpairment = categoryKey === 'motor';
           var prefs = buildPreferences((isBlindnessComplete || isMotorImpairment) ? {} : option.prefs);
-          saveOnboardingPreferences(prefs, { goToVoice: isBlindnessComplete || isMotorImpairment });
+          saveOnboardingPreferences(prefs, {
+            enableWorkflow: isBlindnessComplete,
+            enableCommands: isMotorImpairment
+          });
         });
         gtkyDetailOptions.appendChild(btn);
       });
@@ -1233,16 +1248,15 @@
     isTTSSpeaking = false;
 
     try {
-      // Step 0: Check for restricted URL (e.g. chrome://) and redirect to Google
-      // This is a workaround to ensure the extension can run content scripts
+      // Step 0: Check for restricted URL (e.g. chrome://)
       var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tabs[0] && (!tabs[0].url.startsWith('http'))) {
-        updateStepIndicator('Restricted page detected. Redirecting to Google...');
-        await chrome.tabs.update(tabs[0].id, { url: 'https://www.google.com' });
+      var activeTab = tabs[0];
 
-        // Stop workflow so page can load. User can restart.
-        voiceWorkflowActive = false;
-        voiceWorkflowToggle.checked = false;
+      // If we are on a restricted page (not http/https) and it's NOT our own dashboard
+      if (activeTab && !activeTab.url.startsWith('http') && !activeTab.url.includes(chrome.runtime.id)) {
+        updateStepIndicator('Waiting for a valid webpage...');
+        // Don't disable the toggle, just wait.
+        // The user might be on the dashboard or a chrome:// page.
         return;
       }
 
@@ -1250,7 +1264,7 @@
       var domData = null;
       var description = null;
 
-      // Step 2: Try to get AI description (optional - if it fails, skip to listening)
+      // Step 2: Try to get AI description
       try {
         updateStepIndicator('Extracting page information...');
         domData = await extractDOMFromTab();
@@ -1262,15 +1276,11 @@
         if (!voiceWorkflowActive) return;
 
         // Step 3: Start STT FIRST (so it can hear "Vector" during TTS)
-        // Then speak the description
         updateStepIndicator('Speaking... (say "Vector" to interrupt)');
 
-        // Start continuous STT listening BEFORE TTS starts
         startSTT();
-
-        // Mark TTS as speaking so STT knows to check for wake word
         isTTSSpeaking = true;
-        setTTSContext(description); // Track what we're saying to filter it out
+        setTTSContext(description);
 
         await new Promise(function (resolve) {
           speakText(description, function () {
@@ -1280,38 +1290,30 @@
           });
         });
 
-        // If wake word was detected, we already switched to command mode
-        // The STT is still running and will process the next command
         if (wakeWordInterrupted || !voiceWorkflowActive) return;
 
       } catch (descErr) {
-        // If page description fails (no API key, etc), skip to listening
+        // If page description fails, skip to listening but STAY ACTIVE
         console.warn('[VoiceWorkflow] Page description failed, skipping to listen:', descErr.message);
-        updateStepIndicator('Skipping description (API error). Listening for your command...');
+        updateStepIndicator('Buddy is ready for your command.');
 
-        // Speak a brief notification
         await new Promise(function (resolve) {
           speakText('Ready for your command.', resolve);
         });
         if (!voiceWorkflowActive) return;
       }
 
-      // Step 4: STT is already running from Step 3
-      // Just update the indicator - STT onresult will handle commands
+      // Step 4: STT is already running from Step 3 or if desc failed
       updateStepIndicator('Listening for your command...');
-      // If STT wasn't started yet (due to description error path), start it now
       if (!sttIsListening) {
         startSTT();
       }
-      // The STT onresult handler (Section 3) will detect voiceWorkflowActive
-      // and call voiceWorkflowSendCommand() when a final transcript arrives.
 
     } catch (err) {
-      updateStepIndicator('Error: ' + err.message);
-      voiceWorkflowActive = false;
-      voiceWorkflowToggle.checked = false;
-      workflowStatusEl.textContent = 'Off';
-      workflowStatusEl.classList.remove('active');
+      console.error('[VoiceWorkflow] Error in cycle:', err);
+      updateStepIndicator('Waiting for valid page or command...');
+      // Keep voiceWorkflowActive = true so it doesn't just die
+      // The next interaction or page load can pick it up
     }
   }
 
