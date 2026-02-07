@@ -1,1 +1,1875 @@
-(() => { "use strict"; var e; !function (e) { e.PROCESS_COMMAND = "PROCESS_COMMAND", e.COMMAND_RESULT = "COMMAND_RESULT", e.GET_DOM_CONTEXT = "GET_DOM_CONTEXT", e.DOM_CONTEXT_RESPONSE = "DOM_CONTEXT_RESPONSE", e.EXECUTE_ACTION = "EXECUTE_ACTION", e.ACTION_RESULT = "ACTION_RESULT", e.CLARIFICATION_NEEDED = "CLARIFICATION_NEEDED", e.CLARIFICATION_RESPONSE = "CLARIFICATION_RESPONSE", e.GET_SETTINGS = "GET_SETTINGS", e.SETTINGS_RESPONSE = "SETTINGS_RESPONSE", e.SETTINGS_UPDATED = "SETTINGS_UPDATED", e.STATUS_UPDATE = "STATUS_UPDATE", e.ERROR = "ERROR", e.PING = "PING", e.PONG = "PONG" }(e || (e = {})); const t = { provider: "claude", apiKey: "", intentModel: "claude-3-5-haiku-20241022", codeGenModel: "claude-sonnet-4-20250514", maxRetries: 3, confirmDestructive: !0, audioFeedback: !1, theme: "system" }, n = [{ pattern: /^scroll\s+(down|up)(?:\s+(\d+))?$/i, action: "scroll", extractParams: e => ({ direction: e[1].toLowerCase(), amount: e[2] || "400" }) }, { pattern: /^scroll\s+to\s+(top|bottom)$/i, action: "scroll", extractParams: e => ({ direction: e[1].toLowerCase() }) }, { pattern: /^page\s+(down|up)$/i, action: "scroll", extractParams: e => ({ direction: e[1].toLowerCase(), amount: "800" }) }, { pattern: /^go\s+back$/i, action: "goBack" }, { pattern: /^go\s+forward$/i, action: "goForward" }, { pattern: /^(refresh|reload)(\s+page)?$/i, action: "reload" }, { pattern: /^(?:.*?\s+)?(?:navigating|navigate|go|open)(?:\s+to)?(?:\s+the)?(?:\s+website)?\s+([a-zA-Z0-9][-a-zA-Z0-9]*(?:\.[a-zA-Z0-9][-a-zA-Z0-9]*)+(?:\/\S*)?)$/i, action: "navigate", extractParams: e => ({ url: e[1] }) }, { pattern: /^(?:.*?\s+)?(?:navigating|navigate|go|open)(?:\s+to)?\s+(https?:\/\/\S+)$/i, action: "navigate", extractParams: e => ({ url: e[1] }) }, { pattern: /^click\s+["']([^"']+)["']$/i, action: "clickByText", extractParams: e => ({ text: e[1] }) }, { pattern: /^click\s+on\s+["']([^"']+)["']$/i, action: "clickByText", extractParams: e => ({ text: e[1] }) }, { pattern: /^new\s+tab$/i, action: "newTab" }, { pattern: /^close\s+tab$/i, action: "closeTab" }, { pattern: /^duplicate\s+tab$/i, action: "duplicateTab" }, { pattern: /^reopen\s+(?:closed\s+)?tab$/i, action: "reopenTab" }, { pattern: /^mute\s+tab$/i, action: "muteTab" }, { pattern: /^unmute\s+tab$/i, action: "muteTab" }, { pattern: /^(mute|unmute)\s+tab$/i, action: "muteTab", extractParams: e => ({ state: e[1].toLowerCase() }) }, { pattern: /^(pin|unpin)\s+tab$/i, action: "pinTab", extractParams: e => ({ state: e[1].toLowerCase() }) }, { pattern: /^new\s+window$/i, action: "newWindow" }, { pattern: /^new\s+incognito$/i, action: "newIncognito" }, { pattern: /^close\s+window$/i, action: "closeWindow" }, { pattern: /^minimize(?:\s+window)?$/i, action: "minimize" }, { pattern: /^maximize(?:\s+window)?$/i, action: "maximize" }, { pattern: /^fullscreen$/i, action: "fullscreen" }, { pattern: /^zoom\s+in$/i, action: "zoomIn" }, { pattern: /^zoom\s+out$/i, action: "zoomOut" }, { pattern: /^reset\s+zoom$/i, action: "zoomReset" }, { pattern: /^print(?:.*?)$/i, action: "print" }, { pattern: /^save\s+page$/i, action: "savePage" }, { pattern: /^find\s+(.+)$/i, action: "findInPage", extractParams: e => ({ text: e[1] }) }, { pattern: /^(?:open\s+)?dev\s?tools$/i, action: "openDevTools" }, { pattern: /^(?:open\s+)?history$/i, action: "openHistory" }, { pattern: /^(?:open\s+)?downloads$/i, action: "openDownloads" }, { pattern: /^(?:open\s+)?settings$/i, action: "openSettings" }, { pattern: /^play$/i, action: "mediaPlay" }, { pattern: /^pause$/i, action: "mediaPause" }, { pattern: /^(?:enter|exit)\s+fullscreen$/i, action: "mediaFullscreen" }, { pattern: /^submit(?:.*?)$/i, action: "submit" }, { pattern: /^clear\s+(?:the\s+)?field$/i, action: "clearField" }, { pattern: /^select\s+all$/i, action: "selectAll" }]; async function s(e, t) { let { url: n } = e; return n.startsWith("http://") || n.startsWith("https://") || (n = "https://" + n), await chrome.tabs.update(t, { url: n }), { success: !0, message: `Navigating to ${n}` } } async function o(e, t, n) { try { switch (e) { case "new": await chrome.tabs.create({ url: "chrome://newtab" }); break; case "close": await chrome.tabs.remove(n); break; case "duplicate": await chrome.tabs.duplicate(n); break; case "reopen": if (!chrome.sessions || !chrome.sessions.restore) return { success: !1, error: "Session restore not available" }; await chrome.sessions.restore(); break; case "mute": await chrome.tabs.update(n, { muted: !0 }); break; case "unmute": await chrome.tabs.update(n, { muted: !1 }); break; case "pin": await chrome.tabs.update(n, { pinned: !0 }); break; case "unpin": await chrome.tabs.update(n, { pinned: !1 }); break; case "newWindow": await chrome.windows.create({ incognito: "true" === t.incognito }); break; case "closeWindow": const e = await chrome.windows.getCurrent(); e.id && await chrome.windows.remove(e.id); break; default: return { success: !1, error: "Unknown tab sub-action" } }return { success: !0, message: `Tab action '${e}' completed` } } catch (e) { return { success: !1, error: e.message } } } async function a(e, t) { if (0 === e) await chrome.tabs.setZoom(t, 0); else { const n = await chrome.tabs.getZoom(t); await chrome.tabs.setZoom(t, n * e) } return { success: !0, message: "Zoom updated" } } async function r(e, t) { return await chrome.scripting.executeScript({ target: { tabId: t }, func: e => { const t = document.querySelector("video, audio"); t && ("play" === e && t.play(), "pause" === e && t.pause(), "fullscreen" === e && (document.fullscreenElement ? document.exitFullscreen() : t.requestFullscreen())) }, args: [e] }), { success: !0, message: `Media ${e}` } } async function i(e, t) { return await chrome.scripting.executeScript({ target: { tabId: t }, func: e => { const t = document.activeElement; "clear" === e && (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) && (t.value = ""), "selectAll" === e && (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) && t.select(), "submit" === e && (t instanceof HTMLFormElement ? t.submit() : t.closest("form")?.submit()) }, args: [e] }), { success: !0, message: `Form ${e}` } } async function c(e) { const { provider: t, apiKey: n, model: s, systemPrompt: o, userMessage: a, maxTokens: r = 1e3, temperature: i = .7 } = e; if (!n) throw new Error("API key is required"); switch (t) { case "claude": return async function (e, t, n, s, o, a) { const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": e, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: t, max_tokens: o, temperature: a, system: n, messages: [{ role: "user", content: s }] }) }); if (!r.ok) { const e = await r.text(); throw console.error("[AIClient] Claude API error:", e), new Error(`Claude API error: ${r.status} - ${e}`) } const i = await r.json(); if (!i.content || !i.content[0] || !i.content[0].text) throw new Error("Invalid response from Claude API"); return i.content[0].text }(n, s, o, a, r, i); case "openai": return async function (e, t, n, s, o, a) { const r = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${e}` }, body: JSON.stringify({ model: t, max_tokens: o, temperature: a, messages: [{ role: "system", content: n }, { role: "user", content: s }] }) }); if (!r.ok) { const e = await r.text(); throw console.error("[AIClient] OpenAI API error:", e), new Error(`OpenAI API error: ${r.status} - ${e}`) } const i = await r.json(); if (!i.choices || !i.choices[0] || !i.choices[0].message) throw new Error("Invalid response from OpenAI API"); return i.choices[0].message.content }(n, s, o, a, r, i); default: throw new Error(`Unknown AI provider: ${t}`) } } new class { constructor(e = 10, t = 6e4) { this.requests = [], this.maxRequests = e, this.windowMs = t } canProceed() { const e = Date.now(); return this.requests = this.requests.filter(t => e - t < this.windowMs), !(this.requests.length >= this.maxRequests || (this.requests.push(e), 0)) } getWaitTime() { return this.requests.length < this.maxRequests ? 0 : Math.min(...this.requests) + this.windowMs - Date.now() } }(10, 6e4); const l = [{ pattern: /fetch\s*\(/gi, reason: "Network requests are not allowed" }, { pattern: /XMLHttpRequest/gi, reason: "Network requests are not allowed" }, { pattern: /\.ajax\s*\(/gi, reason: "Network requests are not allowed" }, { pattern: /axios\./gi, reason: "Network requests are not allowed" }, { pattern: /navigator\.sendBeacon/gi, reason: "Network requests are not allowed" }, { pattern: /WebSocket/gi, reason: "WebSocket connections are not allowed" }, { pattern: /document\.cookie/gi, reason: "Cookie access is not allowed" }, { pattern: /localStorage/gi, reason: "localStorage access is not allowed" }, { pattern: /sessionStorage/gi, reason: "sessionStorage access is not allowed" }, { pattern: /indexedDB/gi, reason: "IndexedDB access is not allowed" }, { pattern: /caches\./gi, reason: "Cache API access is not allowed" }, { pattern: /eval\s*\(/gi, reason: "eval() is not allowed" }, { pattern: /Function\s*\(/gi, reason: "Function constructor is not allowed" }, { pattern: /setTimeout\s*\(\s*['"`]/gi, reason: "setTimeout with string argument is not allowed" }, { pattern: /setInterval\s*\(\s*['"`]/gi, reason: "setInterval with string argument is not allowed" }, { pattern: /<script/gi, reason: "Script injection is not allowed" }, { pattern: /javascript:/gi, reason: "javascript: URLs are not allowed" }, { pattern: /data:text\/html/gi, reason: "data: HTML URLs are not allowed" }, { pattern: /chrome\.\w+/gi, reason: "Chrome extension APIs are not allowed in injected code" }, { pattern: /browser\.\w+/gi, reason: "Browser APIs are not allowed in injected code" }], u = [{ pattern: /\b(pay|purchase|buy|checkout|order|subscribe|billing)\b/gi, message: "This action involves a payment or purchase" }, { pattern: /\b(delete|remove|cancel|unsubscribe|close\s*account|deactivate)\b/gi, message: "This action may delete or remove data" }, { pattern: /\b(password|credit\s*card|ssn|social\s*security)\b/gi, message: "This action involves sensitive data" }, { pattern: /\.submit\s*\(\s*\)/gi, message: "This action will submit a form" }]; function d(e, t) { for (const { pattern: t, reason: n } of l) if (t.lastIndex = 0, t.test(e)) return { safe: !1, blocked: e.match(t)?.[0] || "unknown", blockedReason: n }; const n = []; for (const { pattern: t, message: s } of u) t.lastIndex = 0, t.test(e) && n.push(s); return n.length > 0 ? { safe: !0, requiresConfirmation: !0, confirmationMessage: `This action has been flagged for review:\n- ${n.join("\n- ")}\n\nDo you want to proceed?`, flaggedPatterns: n } : { safe: !0 } } const m = []; let p = !1; function g(e = 5) { const t = Date.now(); return m.filter(n => t - n.timestamp < 1e3 * e) } async function h(e, t) { try { switch (console.log("[Executor] Executing action:", e.actionType, e.selector), e.actionType) { case "click": return async function (e, t) { const n = await chrome.scripting.executeScript({ target: { tabId: t }, func: e => { const t = window.__aiAgentElementMap; let n = t?.get(e); if (!n && e && (n = document.querySelector(e)), !n && e) { const t = document.querySelectorAll('button, a, [role="button"], input[type="submit"]'); for (const s of t) if (s.textContent?.toLowerCase().includes(e.toLowerCase())) { n = s; break } } if (!n) return { success: !1, error: `Element not found: ${e}` }; n.scrollIntoView({ behavior: "smooth", block: "center" }); const s = n, o = s.style.outline; return s.style.outline = "3px solid #4CAF50", setTimeout(() => { s.style.outline = o, s.click() }, 300), { success: !0 } }, args: [e] }), s = n[0]?.result; return s?.success ? { success: !0, message: `Clicked ${e}` } : { success: !1, error: s?.error || "Click failed" } }(e.selector || "", t); case "fill": return async function (e, t, n) { const s = await chrome.scripting.executeScript({ target: { tabId: n }, func: (e, t) => { const n = window.__aiAgentElementMap; let s = n?.get(e) || document.querySelector(e); return s || (s = document.querySelector(`input[placeholder*="${e}" i], input[name*="${e}" i], textarea[placeholder*="${e}" i]`)), s && (s instanceof HTMLInputElement || s instanceof HTMLTextAreaElement) ? (s.focus(), s.value = t, s.dispatchEvent(new Event("input", { bubbles: !0 })), s.dispatchEvent(new Event("change", { bubbles: !0 })), { success: !0 }) : { success: !1, error: `Input not found: ${e}` } }, args: [e, t] }), o = s[0]?.result; return o?.success ? { success: !0, message: `Filled ${e}` } : { success: !1, error: o?.error || "Fill failed" } }(e.selector || "", e.code, t); case "scroll": return async function (e, t) { return await chrome.scripting.executeScript({ target: { tabId: t }, func: e => { const t = 400, n = e => { const t = window.getComputedStyle(e); return ("auto" === t.overflowY || "scroll" === t.overflowY) && e.scrollHeight > e.clientHeight }, s = (() => { if (document.activeElement && n(document.activeElement)) return document.activeElement; let e = null, t = 0; return document.querySelectorAll("*").forEach(s => { if (n(s)) { const n = s.getBoundingClientRect(), o = n.width * n.height; o > t && o > 2e4 && (t = o, e = s) } }), e || window })(), o = s === window, a = s; switch (e.toLowerCase()) { case "down": o ? window.scrollBy({ top: t, behavior: "smooth" }) : a.scrollBy({ top: t, behavior: "smooth" }); break; case "up": o ? window.scrollBy({ top: -400, behavior: "smooth" }) : a.scrollBy({ top: -400, behavior: "smooth" }); break; case "top": o ? window.scrollTo({ top: 0, behavior: "smooth" }) : a.scrollTo({ top: 0, behavior: "smooth" }); break; case "bottom": o ? window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }) : a.scrollTo({ top: a.scrollHeight, behavior: "smooth" }) } }, args: [e] }), { success: !0, message: `Scrolled ${e}` } }(e.code, t); case "navigate": return async function (e, t) { let n = e.trim(); return n.startsWith("http://") || n.startsWith("https://") || (n = "https://" + n), await chrome.tabs.update(t, { url: n }), { success: !0, message: `Navigating to ${n}` } }(e.code, t); case "extract": return async function (e, t, n) { const s = await chrome.scripting.executeScript({ target: { tabId: t }, func: (e, t) => { const n = document.querySelector(e) || document.body; return t && "text" !== t ? "html" === t || "outerHTML" === t ? { text: n.outerHTML } : "innerHTML" === t ? { text: n.innerHTML } : "style" === t ? { text: window.getComputedStyle(n).cssText } : "attributes" === t ? { text: Array.from(n.attributes).map(e => `${e.name}="${e.value}"`).join(" ") } : { text: n.getAttribute(t) || "" } : { text: n.innerText?.slice(0, 1e3) } }, args: [e, n] }), o = s[0]?.result; return { success: !0, message: o?.text || "No content extracted" } }(e.selector || "", t, "string" == typeof e.value ? e.value : void 0); case "modify": return async function (e, t) { return await chrome.scripting.executeScript({ target: { tabId: t }, func: e => { try { const t = JSON.parse(e), n = "ai-agent-mod-" + Date.now(); let s = ""; if ("enlarge-text" === t.type ? s = `body * { font-size: ${t.scale || 1.2}em !important; }` : "bold-text" === t.type ? s = "body p, body span, body div { font-weight: 600 !important; }" : "high-contrast" === t.type ? s = "body { filter: contrast(1.2) !important; }" : t.css && (s = t.css), s) { const e = document.createElement("style"); e.id = n, e.textContent = s, document.head.appendChild(e) } } catch { const t = document.createElement("style"); t.id = "ai-agent-mod-" + Date.now(), t.textContent = e, document.head.appendChild(t) } }, args: [e] }), { success: !0, message: "Style applied" } }(e.code, t); case "tab": return async function (e, t, n) { try { const t = JSON.parse(e), s = t.action; switch (s) { case "new": return await chrome.tabs.create({ url: t.url || "chrome://newtab" }), { success: !0, message: "Opened new tab" }; case "close": return await chrome.tabs.remove(n), { success: !0, message: "Closed tab" }; case "duplicate": return await chrome.tabs.duplicate(n), { success: !0, message: "Duplicated tab" }; case "reload": return await chrome.tabs.reload(n), { success: !0, message: "Reloaded tab" }; case "mute": return await chrome.tabs.update(n, { muted: !0 }), { success: !0, message: "Muted tab" }; case "unmute": return await chrome.tabs.update(n, { muted: !1 }), { success: !0, message: "Unmuted tab" }; case "pin": return await chrome.tabs.update(n, { pinned: !0 }), { success: !0, message: "Pinned tab" }; case "unpin": return await chrome.tabs.update(n, { pinned: !1 }), { success: !0, message: "Unpinned tab" }; case "newWindow": return await chrome.windows.create({ url: t.url, incognito: t.incognito }), { success: !0, message: "Opened new window" }; case "closeWindow": const e = await chrome.windows.getCurrent(); return e.id && await chrome.windows.remove(e.id), { success: !0, message: "Closed window" }; case "minimize": const o = await chrome.windows.getCurrent(); return o.id && await chrome.windows.update(o.id, { state: "minimized" }), { success: !0, message: "Minimized window" }; case "maximize": const a = await chrome.windows.getCurrent(); return a.id && await chrome.windows.update(a.id, { state: "maximized" }), { success: !0, message: "Maximized window" }; case "fullscreen": const r = await chrome.windows.getCurrent(); return r.id && await chrome.windows.update(r.id, { state: "fullscreen" }), { success: !0, message: "Fullscreen window" }; default: return { success: !1, error: `Unknown tab action: ${s}` } } } catch (e) { return { success: !1, error: e instanceof Error ? e.message : "Tab action failed" } } }(e.code, e.selector, t); case "keyboard": return async function (e, t, n) { try { const s = JSON.parse(e), o = await chrome.scripting.executeScript({ target: { tabId: n }, func: (e, t) => { const n = (e => { if (!e) return document.activeElement || document.body; const t = window.__aiAgentElementMap; return t?.get(e) || document.querySelector(e) || document.activeElement || document.body })(t); if (!n) return { success: !1, error: "Target not found" }; if (n.focus(), "type" === e.action) { const t = e.text || ""; if (n instanceof HTMLInputElement || n instanceof HTMLTextAreaElement) { const e = n.selectionStart || 0, s = n.selectionEnd || 0, o = n.value; n.value = o.substring(0, e) + t + o.substring(s), n.selectionStart = n.selectionEnd = e + t.length } else n.innerText += t; n.dispatchEvent(new Event("input", { bubbles: !0 })), n.dispatchEvent(new Event("change", { bubbles: !0 })) } else if ("press" === e.action) { const t = e.keys, s = { ctrlKey: t.toLowerCase().includes("ctrl"), altKey: t.toLowerCase().includes("alt"), shiftKey: t.toLowerCase().includes("shift"), metaKey: t.toLowerCase().includes("meta") || t.toLowerCase().includes("cmd") }; let o = 0, a = ""; t.toLowerCase().includes("enter") ? (o = 13, a = "Enter") : t.toLowerCase().includes("backspace") ? (o = 8, a = "Backspace") : t.toLowerCase().includes("delete") ? (o = 46, a = "Delete") : t.toLowerCase().includes("tab") ? (o = 9, a = "Tab") : t.toLowerCase().includes("escape") ? (o = 27, a = "Escape") : t.toLowerCase().includes("arrowleft") ? (o = 37, a = "ArrowLeft") : t.toLowerCase().includes("arrowup") ? (o = 38, a = "ArrowUp") : t.toLowerCase().includes("arrowright") ? (o = 39, a = "ArrowRight") : t.toLowerCase().includes("arrowdown") ? (o = 40, a = "ArrowDown") : a = t.replace(/ctrl\+|alt\+|shift\+|meta\+/gi, ""); const r = { key: a, code: a, keyCode: o, which: o, bubbles: !0, cancelable: !0, composed: !0, ...s }; n.dispatchEvent(new KeyboardEvent("keydown", r)), n.dispatchEvent(new KeyboardEvent("keypress", r)), n.dispatchEvent(new KeyboardEvent("keyup", r)), "Enter" === a && (n instanceof HTMLInputElement || "BUTTON" === n.tagName) && ("BUTTON" === n.tagName || "submit" === n.type ? n.click() : n.closest("form")?.submit()) } else if ("copy" === e.action) document.execCommand("copy"); else if ("cut" === e.action) document.execCommand("cut"); else if ("paste" === e.action) { if (!document.execCommand("paste")) return { success: !1, error: "Paste requires clipboard permission" } } else "selectAll" === e.action ? n instanceof HTMLInputElement || n instanceof HTMLTextAreaElement ? n.select() : document.execCommand("selectAll") : "clear" === e.action && (n instanceof HTMLInputElement || n instanceof HTMLTextAreaElement) && (n.value = "", n.dispatchEvent(new Event("input", { bubbles: !0 })), n.dispatchEvent(new Event("change", { bubbles: !0 }))); return { success: !0 } }, args: [s, t] }), a = o[0]?.result; return a?.success ? { success: !0, message: "Keyboard action executed" } : { success: !1, error: a?.error || "Keyboard execution failed" } } catch (e) { return { success: !1, error: e instanceof Error ? e.message : "Keyboard action error" } } }(e.code, e.selector || "", t); case "browser": return async function (e, t) { try { const n = JSON.parse(e), s = n.action; switch (s) { case "zoom": const e = n.level ? n.level / 100 : 0; return await chrome.tabs.setZoom(t, e), { success: !0, message: `Zoom set to ${n.level || 100}%` }; case "print": return await chrome.scripting.executeScript({ target: { tabId: t }, func: () => window.print() }), { success: !0, message: "Print dialog opened" }; case "history": return await chrome.tabs.create({ url: "chrome://history" }), { success: !0, message: "Opened history" }; case "downloads": return await chrome.tabs.create({ url: "chrome://downloads" }), { success: !0, message: "Opened downloads" }; case "settings": return await chrome.tabs.create({ url: "chrome://settings" }), { success: !0, message: "Opened settings" }; case "extensions": return await chrome.tabs.create({ url: "chrome://extensions" }), { success: !0, message: "Opened extensions" }; case "searchScripts": const o = n.keyword || "", a = await chrome.scripting.executeScript({ target: { tabId: t }, func: e => Array.from(document.scripts).map((t, n) => t.src.includes(e) ? `Script ${n} (SRC): ${t.src}` : t.textContent?.includes(e) ? `Script ${n} (INLINE): ...${t.textContent.substring(Math.max(0, t.textContent.indexOf(e) - 50), t.textContent.indexOf(e) + 100).replace(/\s+/g, " ")}...` : null).filter(Boolean), args: [o] }), r = a[0]?.result || []; return { success: !0, message: r.length > 0 ? `Found ${r.length} matches:\n${r.join("\n")}` : `No scripts found containing "${o}"` }; case "monitorNetwork": const i = "number" == typeof n.seconds ? n.seconds : 5, c = g(i); return { success: !0, message: c.length > 0 ? `Captured ${c.length} requests in last ${i}s:\n${c.map(e => `${e.method} ${e.url}`).join("\n")}` : `No network requests captured in last ${i}s` }; case "devtools": return { success: !0, message: "Please press F12 to open DevTools" }; case "screenshot": return await chrome.tabs.captureVisibleTab(), { success: !0, message: "Screenshot captured" }; default: return { success: !1, error: `Unknown browser action: ${s}` } } } catch (e) { return { success: !1, error: e instanceof Error ? e.message : "Browser action failed" } } }(e.code, t); default: return async function (e, t) { try { const n = await chrome.scripting.executeScript({ target: { tabId: t }, func: e => { try { return new Function(e)(), { success: !0 } } catch (e) { return { success: !1, error: e.message } } }, args: [e] }), s = n[0]?.result; return s?.success ? { success: !0, message: "Code executed" } : { success: !1, error: s?.error || "Execution failed" } } catch (e) { return { success: !1, error: "Code execution blocked" } } }(e.code, t) } } catch (e) { return console.error("[Executor] Action execution error:", e), { success: !1, error: e instanceof Error ? e.message : "Execution failed" } } } async function w(e, t) { if (!e || "none" === e.type) return { success: !0, expectedResult: "No verification needed", actualResult: "Skipped" }; await new Promise(e => setTimeout(e, 300)); try { if ("navigation" === e.type) { if (!e.expectedResult) return { success: !0, expectedResult: "any", actualResult: "Navigation initiated" }; const n = await chrome.tabs.get(t), s = n.url?.toLowerCase() || "", o = e.expectedResult.toLowerCase(); return { success: s.includes(o) || "loading" === n.status, expectedResult: e.expectedResult, actualResult: n.url || "loading" } } return { success: !0, expectedResult: e.expectedResult || "Change applied", actualResult: "Verified" } } catch (t) { return console.warn("[Executor] Verification check failed:", t), { success: !0, expectedResult: e.expectedResult || "unknown", actualResult: "Verification skipped due to error" } } } function f() { const e = []; let t = 0; const n = new Map; document.querySelectorAll(["a[href]", "button", "input", "select", "textarea", '[role="button"]', '[role="link"]', "[onclick]"].join(",")).forEach(s => { const o = s.getBoundingClientRect(), a = window.getComputedStyle(s); if (o.width > 0 && o.height > 0 && "none" !== a.display && "hidden" !== a.visibility && o.top < window.innerHeight) { const a = "el-" + t++; n.set(a, s), e.push({ id: a, tagName: s.tagName.toLowerCase(), text: (s.textContent || "").trim().slice(0, 100), attributes: { id: s.id || void 0, href: s.getAttribute("href") || void 0, type: s.getAttribute("type") || void 0, placeholder: s.getAttribute("placeholder") || void 0, ariaLabel: s.getAttribute("aria-label") || void 0, name: s.getAttribute("name") || void 0 }, isInteractive: !0, boundingBox: { x: Math.round(o.x), y: Math.round(o.y), width: Math.round(o.width), height: Math.round(o.height) } }) } }), window.__aiAgentElementMap = n; const s = document.querySelector("main, article") || document.body; return { url: window.location.href, title: document.title, timestamp: Date.now(), elements: e, pageText: s.innerText?.slice(0, 2e3) || "" } } async function b(e, t, l, u) { const m = { stage: "idle", command: e }; try { const g = await chrome.tabs.get(t); if (!(p = g.url) || !p.startsWith("http://") && !p.startsWith("https://")) return await chrome.tabs.update(t, { url: "https://www.google.com" }), { success: !0, message: "Navigated to Google. You can now give me commands to interact with the page." }; m.stage = "fast-path"; const b = function (e) { const t = e.trim(); for (const e of n) { const n = t.match(e.pattern); if (n) { const t = e.extractParams ? e.extractParams(n) : {}; return { matched: !0, action: e.action, params: t } } } return { matched: !1 } }(e); if (b.matched) { console.log("[Pipeline] Fast-path matched:", b.action); const e = await async function (e, t, n) { try { switch (e) { case "scroll": return async function (e, t) { const { direction: n, amount: s } = e, o = parseInt(s || "400", 10); return await chrome.scripting.executeScript({ target: { tabId: t }, func: (e, t) => { const n = e => { const t = window.getComputedStyle(e); return ("auto" === t.overflowY || "scroll" === t.overflowY) && e.scrollHeight > e.clientHeight }, s = (() => { if (document.activeElement && n(document.activeElement)) return document.activeElement; let e = null, t = 0; return document.querySelectorAll("*").forEach(s => { if (n(s)) { const n = s.getBoundingClientRect(), o = n.width * n.height; o > t && o > 2e4 && (t = o, e = s) } }), e || window })(), o = s === window, a = s; switch (e) { case "down": o ? window.scrollBy({ top: t, behavior: "smooth" }) : a.scrollBy({ top: t, behavior: "smooth" }); break; case "up": o ? window.scrollBy({ top: -t, behavior: "smooth" }) : a.scrollBy({ top: -t, behavior: "smooth" }); break; case "top": o ? window.scrollTo({ top: 0, behavior: "smooth" }) : a.scrollTo({ top: 0, behavior: "smooth" }); break; case "bottom": o ? window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }) : a.scrollTo({ top: a.scrollHeight, behavior: "smooth" }) }return { success: !0 } }, args: [n, o] }), { success: !0, message: `Scrolled ${n}` } }(t, n); case "goBack": return async function (e) { return await chrome.scripting.executeScript({ target: { tabId: e }, func: () => { window.history.back() } }), { success: !0, message: "Navigated back" } }(n); case "goForward": return async function (e) { return await chrome.scripting.executeScript({ target: { tabId: e }, func: () => { window.history.forward() } }), { success: !0, message: "Navigated forward" } }(n); case "reload": return async function (e) { return await chrome.tabs.reload(e), { success: !0, message: "Page reloaded" } }(n); case "navigate": return s(t, n); case "clickByText": return async function (e, t) { const { text: n } = e, s = await chrome.scripting.executeScript({ target: { tabId: t }, func: e => { const t = document.querySelectorAll('button, a, [role="button"], input[type="submit"], input[type="button"]'); for (const n of t) { const t = n.textContent?.trim() || "", s = n.getAttribute("aria-label") || "", o = n.value || ""; if (t.toLowerCase() === e.toLowerCase() || s.toLowerCase() === e.toLowerCase() || o.toLowerCase() === e.toLowerCase()) { n.scrollIntoView({ behavior: "smooth", block: "center" }); const e = n, t = e.style.outline; return e.style.outline = "3px solid #4CAF50", setTimeout(() => { e.style.outline = t }, 500), setTimeout(() => { n.click() }, 300), { success: !0, found: !0 } } } return { success: !1, found: !1, error: `No element found with text "${e}"` } }, args: [n] }), o = s[0]?.result; return o?.found ? { success: !0, message: `Clicked "${n}"` } : { success: !1, error: o?.error || `Could not find element with text "${n}"` } }(t, n); case "newTab": return o("new", {}, n); case "closeTab": return o("close", {}, n); case "duplicateTab": return o("duplicate", {}, n); case "reopenTab": return o("reopen", {}, n); case "muteTab": return o("mute" === t.state ? "mute" : "unmute", {}, n); case "pinTab": return o("pin" === t.state ? "pin" : "unpin", {}, n); case "newWindow": return o("newWindow", {}, n); case "newIncognito": return o("newWindow", { incognito: "true" }, n); case "closeWindow": return o("closeWindow", {}, n); case "minimize": return o("minimize", {}, n); case "maximize": return o("maximize", {}, n); case "fullscreen": return o("fullscreen", {}, n); case "zoomIn": return a(1.1, n); case "zoomOut": return a(.9, n); case "zoomReset": return a(0, n); case "print": return async function (e, t) { return await chrome.scripting.executeScript({ target: { tabId: t }, func: e => { window.eval(e) }, args: ["window.print()"] }), { success: !0, message: "Executed" } }(0, n); case "savePage": return { success: !0, message: "Please use Ctrl+S to save (automation limited)" }; case "findInPage": return { success: !0, message: `Use Ctrl+F to find: ${t.text}` }; case "openDevTools": return { success: !0, message: "Press F12 for DevTools" }; case "openHistory": return s({ url: "chrome://history" }, n); case "openDownloads": return s({ url: "chrome://downloads" }, n); case "openSettings": return s({ url: "chrome://settings" }, n); case "mediaPlay": return r("play", n); case "mediaPause": return r("pause", n); case "mediaFullscreen": return r("fullscreen", n); case "submit": return i("submit", n); case "clearField": return i("clear", n); case "selectAll": return i("selectAll", n); default: return { success: !1, error: `Unknown fast-path action: ${e}` } } } catch (e) { return { success: !1, error: e instanceof Error ? e.message : "Fast-path execution failed" } } }(b.action, b.params || {}, t); return { success: e.success, message: e.message || "Action completed" } } let y; m.stage = "intent"; try { y = await async function (e) { try { const t = await chrome.tabs.sendMessage(e, { type: "GET_DOM_CONTEXT", timestamp: Date.now() }); if (t?.success && t.data) return t.data; console.warn("[Executor] Content script unavailable, falling back to inline parser"); const n = await chrome.scripting.executeScript({ target: { tabId: e }, func: f }), s = n[0]?.result; if (!s) throw new Error("Failed to get DOM context"); return s } catch (t) { try { const t = await chrome.scripting.executeScript({ target: { tabId: e }, func: f }), n = t[0]?.result; if (n) return n } catch { } throw console.error("[Executor] Failed to get DOM context:", t), t } }(t) } catch (e) { console.warn("[Pipeline] Failed to get DOM context, using fallback:", e), y = { url: g.url || "unknown", title: g.title || "Unknown Page", timestamp: Date.now(), elements: [], pageText: "Page content not accessible (possibly restricted or loading).", viewport: { width: 0, height: 0 }, documentSize: { width: 0, height: 0 } } } m.domContext = y, u.setDOMContext(y); const x = await async function (e, t, n) { const s = t.pageSummary?.text || `Page: ${t.title}`, o = t.spatialGrid?.textRepresentation || "", a = t.elements.filter(e => e.isInteractive).map(e => { const t = []; e.attributes.ariaLabel && t.push(`aria-label="${e.attributes.ariaLabel}"`), e.attributes.placeholder && t.push(`placeholder="${e.attributes.placeholder}"`), e.attributes.type && t.push(`type="${e.attributes.type}"`), e.attributes.href && t.push(`href="${e.attributes.href.slice(0, 50)}..."`); let n = `[${e.id}] <${e.tagName}${t.length ? " " + t.join(" ") : ""}> "${e.text.slice(0, 50)}"`; return e.relativePosition && (n += ` | Position: ${e.relativePosition}`), e.region && (n += ` [${e.region}]`), e.contentFor && (n += ` | FOR: ${e.contentFor.associationText}`), n }).join("\n"), r = (t.contentContainers || []).slice(0, 10).map((e, t) => `  ${t + 1}. [${e.containerType}] ${e.fullDescription}`).join("\n"), i = `${s}\nURL: ${t.url}\n${o ? `\n${o}` : ""}\nInteractive elements on page:\n${a || "No interactive elements found"}\n${r ? `\nContent containers:\n${r}` : ""}\n\nUser command: "${e}"\n\nAnalyze if this command is clear and unambiguous. Use spatial position, content associations, and nearby element context to resolve references. If there are truly multiple possible targets, ask for clarification.`; try { const t = await c({ provider: n.provider, apiKey: n.apiKey, model: n.intentModel, systemPrompt: 'You are an intent analyzer for a browser automation assistant. Your job is to determine if a user\'s command is clear enough to execute, or if clarification is needed.\n\nYou receive rich page context including:\n- A page summary with structure and landmarks\n- A spatial grid showing where interactive elements are located\n- Interactive elements with spatial position descriptions, nearby elements, and semantic context\n- Content containers (cards, list items, products) with associated buttons/links\n\nUse this context to:\n1. Determine if the intent is clear and unambiguous\n2. Identify the exact target element(s) using IDs, spatial descriptions, or content associations\n3. Check for multiple possible interpretations\n\nRespond with a JSON object:\n{\n  "clear": boolean,\n  "clarificationQuestion": string | null,\n  "clarificationOptions": string[] | null,\n  "parsedIntent": {\n    "action": "click" | "fill" | "scroll" | "navigate" | "extract" | "modify",\n    "target": string,\n    "value": string | null\n  } | null\n}\n\nWhen disambiguating, leverage spatial context:\n- "the button at the top-right" → use region/relativePosition info\n- "the Apply button for the Software Engineer job" → use contentFor association\n- "the link next to the search box" → use nearbyElements info\n\nExamples of when to ask for clarification:\n- "Click submit" but there are multiple submit buttons in different containers\n- "Fill the form" but there are multiple forms\n- Ambiguous element references that spatial/content context can\'t resolve\n\nExamples of clear commands:\n- "Click the Sign In button" (specific description)\n- "Click Apply on the Software Engineer posting" (content association resolves it)\n- "Fill the email field with test@example.com" (specific target and value)\n- "Scroll down" (simple action)', userMessage: i, maxTokens: 500 }), s = t.match(/\{[\s\S]*\}/); if (!s) return console.error("[IntentLLM] Failed to parse response:", t), { clear: !0, parsedIntent: { action: "click", target: e } }; const o = JSON.parse(s[0]); return { clear: o.clear, clarificationQuestion: o.clarificationQuestion, clarificationOptions: o.clarificationOptions, parsedIntent: o.parsedIntent } } catch (t) { return console.error("[IntentLLM] Error:", t), { clear: !0, parsedIntent: { action: "click", target: e } } } }(e, y, l); if (m.intentResult = x, !x.clear) return m.stage = "clarification", { success: !0, message: x.clarificationQuestion || "Could you please clarify your request?", requiresClarification: !0, clarificationQuestion: x.clarificationQuestion, clarificationOptions: x.clarificationOptions }; m.stage = "codegen"; const v = await async function (e, t, n, s, o) { const a = n.pageSummary?.text || `Page: ${n.title}`, r = n.spatialGrid?.textRepresentation || "", i = (n.navigationGuide || []).map(e => `  ${e.step}. [${e.type}] ${e.description}`).join("\n"), l = n.elements.map(e => { const t = []; e.attributes.id && t.push(`id="${e.attributes.id}"`), e.attributes.className && t.push(`class="${e.attributes.className.slice(0, 50)}"`), e.attributes.ariaLabel && t.push(`aria-label="${e.attributes.ariaLabel}"`), e.attributes.placeholder && t.push(`placeholder="${e.attributes.placeholder}"`), e.attributes.type && t.push(`type="${e.attributes.type}"`), e.attributes.name && t.push(`name="${e.attributes.name}"`), e.attributes.href && t.push(`href="${e.attributes.href.slice(0, 80)}"`); const n = `(${e.boundingBox.x},${e.boundingBox.y} ${e.boundingBox.width}x${e.boundingBox.height})`; let s = `[${e.id}] <${e.tagName} ${t.join(" ")}> "${e.text.slice(0, 80)}" ${e.isInteractive ? "(interactive)" : ""} ${n}`; return e.relativePosition && (s += ` | Pos: ${e.relativePosition}`), e.region && (s += ` [${e.region}]`), e.actionHint && (s += ` | Hint: ${e.actionHint}`), void 0 !== e.importance && (s += ` | Imp: ${e.importance.toFixed(2)}`), e.semanticContext?.parentSection && (s += ` | In: <${e.semanticContext.parentSection}>`, e.semanticContext.parentSectionLabel && (s += ` "${e.semanticContext.parentSectionLabel}"`)), e.contentFor && (s += ` | FOR: ${e.contentFor.associationText}`), e.nearbyElements && e.nearbyElements.length > 0 && (s += ` | Near: ${e.nearbyElements.slice(0, 3).map(e => `${e.direction}: "${e.text}"`).join(", ")}`), s }).join("\n"), u = (n.contentContainers || []).slice(0, 15).map((e, t) => { let n = `  ${t + 1}. [${e.containerType}] ${e.fullDescription}`; return e.actions.length > 0 && (n += `\n     Actions: ${e.actions.map(e => e.description).join("; ")}`), n }).join("\n"), d = o.slice(-5).map(e => `${e.role}: ${e.content}`).join("\n"), m = `${a}\nURL: ${n.url}\n${n.pageType ? `Page type: ${n.pageType}` : ""}\n${n.primaryAction ? `Primary action: "${n.primaryAction.text}"` : ""}\n${r ? `\n${r}` : ""}\n${i ? `Navigation Guide:\n${i}\n` : ""}\nPage text summary:\n${n.pageText.slice(0, 500)}...\n\nDOM Elements:\n${l}\n${u ? `\nContent Containers:\n${u}` : ""}\n\nRecent conversation:\n${d || "None"}\n\nUser command: "${e}"\nParsed intent: ${JSON.stringify(t)}\n\nGenerate structured actions to accomplish this task. Use element IDs (like "el-5") to reference elements. Use content associations and spatial context to select the correct element.`; try { const e = await c({ provider: s.provider, apiKey: s.apiKey, model: s.codeGenModel, systemPrompt: 'You are a browser automation assistant. Generate structured actions to accomplish user tasks on web pages.\n\nYou receive:\n1. The user\'s command and parsed intent\n2. An enhanced DOM context with:\n   - Page summary with structure overview, landmarks, and page type\n   - Spatial grid showing element distribution across the viewport\n   - Interactive elements with spatial positions, nearby elements, semantic context, and importance scores\n   - Content containers (cards, list items, products) with titles and associated actions\n   - Navigation guide describing how the page is laid out\n3. Recent conversation history for context\n\nResponse format (JSON):\n{\n  "success": true,\n  "explanation": "Brief explanation of what the action does",\n  "actions": [\n    {\n      "actionType": "click" | "fill" | "scroll" | "navigate" | "extract" | "modify",\n      "selector": "element ID (e.g., \'el-5\') or CSS selector",\n      "code": "action-specific value (see below)",\n      "description": "Human-readable description",\n      "verification": {\n        "type": "domChange" | "navigation" | "styleChange" | "none",\n        "expectedResult": "What to check for success"\n      }\n    }\n  ]\n}\n\nAction types and their fields:\n\n1. "click" - Click an element\n   - selector: Element ID (e.g., "el-5") or CSS selector or text to match\n   - code: Not used (can be empty string)\n\n2. "fill" - Fill a text input or textarea\n   - selector: Element ID or CSS selector for the input\n   - code: The value to fill in\n\n3. "scroll" - Scroll the page\n   - selector: Not used\n   - code: Direction - one of: "up", "down", "top", "bottom"\n\n4. "navigate" - Navigate to a URL\n   - selector: Not used\n   - code: The URL to navigate to (e.g., "youtube.com" or "https://google.com")\n\n5. "extract" - Get content from element\n   - selector: Target element\n   - value: Optional "html", "style", "attributes", or specific attribute name (default: text)\n   - code: Not used\n\n6. "modify" - Apply CSS style modifications\n   - selector: Not used\n   - code: JSON config like {"type": "enlarge-text", "scale": 1.5} or raw CSS string\n\n7. "tab" - Tab and window management\n   - selector: Not used\n   - code: JSON with action like {"action": "close"} or {"action": "new", "url": "..."} \n\n8. "keyboard" - Keyboard input and shortcuts\n   - selector: Element to focus (optional)\n   - code: JSON like {"action": "press", "keys": "Ctrl+A"} or {"action": "type", "text": "..."}\n\n10. "browser" - Browser UI controls & Advanced Tools\n   - selector: Not used\n   - code: JSON like {"action": "print"}, {"action": "searchScripts", "keyword": "applyUrl"}, or {"action": "monitorNetwork", "seconds": 10}\n\nImportant:\n- Use element IDs from the DOM context when available (e.g., "el-5")\n- For clicks, prefer element IDs, then CSS selectors, then text content matching\n- Use content associations to understand what each button/link is FOR (e.g., "Apply" button is for "Software Engineer" job posting)\n- Use spatial context (region, relativePosition, nearbyElements) to resolve ambiguous references like "the button at the top" or "the link next to the search box"\n- Use the page type to understand the page purpose (login, product-listing, form, etc.)\n- Return success: false if the task cannot be accomplished\n- Do NOT generate JavaScript code - only structured actions', userMessage: m, maxTokens: 2e3 }), t = e.match(/\{[\s\S]*\}/); if (!t) return console.error("[CodeGenLLM] Failed to parse response:", e), { success: !1, actions: [], explanation: "Failed to parse code generation response", error: "Invalid response format" }; const n = JSON.parse(t[0]); if (!n.success) return { success: !1, actions: [], explanation: n.explanation || "Code generation failed", error: n.error || "Unknown error" }; const o = []; for (const e of n.actions || []) e.actionType ? o.push({ code: e.code, selector: e.selector || null, actionType: e.actionType, description: e.description || "Action", verification: e.verification || { type: "none", expectedResult: "" } }) : console.warn("[CodeGenLLM] Invalid action (missing actionType):", e); return { success: o.length > 0, actions: o, explanation: n.explanation || "Generated actions" } } catch (e) { return console.error("[CodeGenLLM] Error:", e), { success: !1, actions: [], explanation: "Code generation failed", error: e instanceof Error ? e.message : "Unknown error" } } }(e, x.parsedIntent, y, l, u.getConversationContext()); if (m.codeGenResult = v, !v.success) return { success: !1, message: v.error || "Failed to generate action code" }; m.stage = "safety"; for (const e of v.actions) { const t = d(e.code, e.actionType); if (m.safetyResult = t, !t.safe) { if (t.blocked) return { success: !1, message: `Action blocked for safety: ${t.blockedReason}` }; t.requiresConfirmation && console.log("[Pipeline] Action requires confirmation:", t.confirmationMessage) } } m.stage = "execution"; const C = []; let T = !0; const $ = []; for (const e of v.actions) { let n = 0; const s = l.maxRetries; let o; for (; n < s;) { n++; const a = await h(e, t); if (a.success) { m.stage = "verification"; const n = await w(e.verification, t); if (n.success) { C.push({ type: e.actionType, target: e.selector, description: e.description }), $.push(e.description), u.recordAction({ type: e.actionType, description: e.description }, !0); break } o = `Verification failed: ${n.details}` } else o = a.error; n < s && (console.log(`[Pipeline] Retry ${n}/${s}: ${o}`), await new Promise(e => setTimeout(e, 500))) } n >= s && o && (T = !1, $.push(`Failed: ${e.description} (${o})`), u.recordAction({ type: e.actionType, description: e.description }, !1)) } return m.stage = "complete", { success: T, message: $.join(". ") || "Actions completed", actions: C } } catch (e) { return m.stage = "error", m.error = e instanceof Error ? e.message : "Unknown error", console.error("[Pipeline] Error:", e), { success: !1, message: `Pipeline error: ${m.error}` } } var p } p || (chrome.webRequest.onBeforeRequest.addListener(function (e) { if ("image" === e.type || "stylesheet" === e.type || "font" === e.type) return; const t = { url: e.url, method: e.method, type: e.type, timestamp: Date.now() }; m.unshift(t), m.length > 50 && m.pop() }, { urls: ["<all_urls>"] }), p = !0, console.log("[NetworkMonitor] Started monitoring")); class y { constructor(e) { this.session = e } get id() { return this.session.id } get tabId() { return this.session.tabId } get messages() { return this.session.messages } get domContext() { return this.session.domContext } get pendingClarification() { return this.session.pendingClarification } addMessage(e) { this.session.messages.push(e), this.session.messages.length > 100 && (this.session.messages = this.session.messages.slice(-50)) } setDOMContext(e) { this.session.domContext = e } recordAction(e, t) { this.session.actionHistory.push({ action: e, success: t, timestamp: Date.now() }), this.session.actionHistory.length > 50 && (this.session.actionHistory = this.session.actionHistory.slice(-30)) } setClarification(e) { this.session.pendingClarification = e } clearClarification() { this.session.pendingClarification = null } getRecentActions(e = 5) { return this.session.actionHistory.slice(-e) } getConversationContext(e = 10) { return this.session.messages.slice(-e) } } const x = new class { constructor() { this.sessions = new Map, this.maxSessions = 50, this.sessionTimeout = 18e5 } getOrCreateSession(e) { let t = this.sessions.get(e); return t ? t.lastActivityAt = Date.now() : (t = { id: crypto.randomUUID(), tabId: e, messages: [], domContext: null, actionHistory: [], pendingClarification: null, createdAt: Date.now(), lastActivityAt: Date.now() }, this.sessions.set(e, t), this.cleanupOldSessions()), new y(t) } getSession(e) { const t = this.sessions.get(e); return t ? (t.lastActivityAt = Date.now(), new y(t)) : null } removeSession(e) { this.sessions.delete(e) } cleanupOldSessions() { const e = Date.now(); for (const [t, n] of this.sessions) e - n.lastActivityAt > this.sessionTimeout && this.sessions.delete(t); if (this.sessions.size > this.maxSessions) { const e = [...this.sessions.entries()].sort((e, t) => e[1].lastActivityAt - t[1].lastActivityAt).slice(0, this.sessions.size - this.maxSessions); for (const [t] of e) this.sessions.delete(t) } } }; let v = t; async function C() { try { const e = await chrome.storage.local.get(["provider", "apiKey", "intentModel", "codeGenModel", "maxRetries", "confirmDestructive", "audioFeedback", "theme"]); v = { ...t, ...e }, console.log("[Background] Settings loaded") } catch (e) { console.error("[Background] Failed to load settings:", e) } } chrome.runtime.onInstalled.addListener(async () => { console.log("[Background] Extension installed"), await C(), chrome.sidePanel && chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: !0 }) }), chrome.runtime.onStartup.addListener(async () => { console.log("[Background] Extension started"), await C() }), chrome.runtime.onMessage.addListener((t, n, s) => (async function (t, n) { const s = n.tab?.id; switch (console.log("[Background] Received message:", t.type), t.type) { case e.PING: return { success: !0, data: "pong" }; case e.PROCESS_COMMAND: return async function (e, t) { const { command: n } = e.payload, s = e.payload.tabId || t; if (!s) return { success: !1, error: "No tab ID available" }; if (v.apiKey || await C(), !v.apiKey) return { success: !1, error: "API key not configured. Please set up your API key in the extension settings." }; try { const e = x.getOrCreateSession(s); e.addMessage({ id: crypto.randomUUID(), role: "user", content: n, timestamp: Date.now() }); const t = await b(n, s, v, e); return e.addMessage({ id: crypto.randomUUID(), role: "assistant", content: t.message, timestamp: Date.now(), actions: t.actions, isError: !t.success }), { success: t.success, data: { message: t.message, actions: t.actions, requiresClarification: t.requiresClarification, clarificationQuestion: t.clarificationQuestion } } } catch (e) { return console.error("[Background] Pipeline error:", e), { success: !1, error: e instanceof Error ? e.message : "Pipeline processing failed" } } }(t, s); case e.CLARIFICATION_RESPONSE: return async function (e, t) { if (!t) return { success: !1, error: "No tab ID available" }; const n = x.getSession(t); return n ? (n.setClarification(e.payload.answer), { success: !0 }) : { success: !1, error: "No active session found" } }(t, s); case e.GET_SETTINGS: return { success: !0, data: v }; case e.SETTINGS_UPDATED: return await C(), { success: !0 }; default: return { success: !1, error: `Unknown message type: ${t.type}` } } }(t, n).then(s).catch(e => { console.error("[Background] Message handling error:", e), s({ success: !1, error: e instanceof Error ? e.message : "Unknown error" }) }), !0)) })();
+(() => {
+  "use strict";
+  var e;
+  !(function (e) {
+    ((e.PROCESS_COMMAND = "PROCESS_COMMAND"),
+      (e.COMMAND_RESULT = "COMMAND_RESULT"),
+      (e.GET_DOM_CONTEXT = "GET_DOM_CONTEXT"),
+      (e.DOM_CONTEXT_RESPONSE = "DOM_CONTEXT_RESPONSE"),
+      (e.EXECUTE_ACTION = "EXECUTE_ACTION"),
+      (e.ACTION_RESULT = "ACTION_RESULT"),
+      (e.CLARIFICATION_NEEDED = "CLARIFICATION_NEEDED"),
+      (e.CLARIFICATION_RESPONSE = "CLARIFICATION_RESPONSE"),
+      (e.GET_SETTINGS = "GET_SETTINGS"),
+      (e.SETTINGS_RESPONSE = "SETTINGS_RESPONSE"),
+      (e.SETTINGS_UPDATED = "SETTINGS_UPDATED"),
+      (e.STATUS_UPDATE = "STATUS_UPDATE"),
+      (e.ERROR = "ERROR"),
+      (e.PING = "PING"),
+      (e.PONG = "PONG"));
+  })(e || (e = {}));
+  const t = {
+      provider: "claude",
+      apiKey: "",
+      intentModel: "claude-3-5-haiku-20241022",
+      codeGenModel: "claude-sonnet-4-20250514",
+      maxRetries: 3,
+      confirmDestructive: !0,
+      audioFeedback: !1,
+      theme: "system",
+    },
+    n = [
+      {
+        pattern: /^scroll\s+(down|up)(?:\s+(\d+))?$/i,
+        action: "scroll",
+        extractParams: (e) => ({
+          direction: e[1].toLowerCase(),
+          amount: e[2] || "400",
+        }),
+      },
+      {
+        pattern: /^scroll\s+to\s+(top|bottom)$/i,
+        action: "scroll",
+        extractParams: (e) => ({ direction: e[1].toLowerCase() }),
+      },
+      {
+        pattern: /^page\s+(down|up)$/i,
+        action: "scroll",
+        extractParams: (e) => ({
+          direction: e[1].toLowerCase(),
+          amount: "800",
+        }),
+      },
+      { pattern: /^go\s+back$/i, action: "goBack" },
+      { pattern: /^go\s+forward$/i, action: "goForward" },
+      { pattern: /^(refresh|reload)(\s+page)?$/i, action: "reload" },
+      {
+        pattern:
+          /^(?:.*?\s+)?(?:navigating|navigate|go|open)(?:\s+to)?(?:\s+the)?(?:\s+website)?\s+([a-zA-Z0-9][-a-zA-Z0-9]*(?:\.[a-zA-Z0-9][-a-zA-Z0-9]*)+(?:\/\S*)?)$/i,
+        action: "navigate",
+        extractParams: (e) => ({ url: e[1] }),
+      },
+      {
+        pattern:
+          /^(?:.*?\s+)?(?:navigating|navigate|go|open)(?:\s+to)?\s+(https?:\/\/\S+)$/i,
+        action: "navigate",
+        extractParams: (e) => ({ url: e[1] }),
+      },
+      {
+        pattern: /^click\s+["']([^"']+)["']$/i,
+        action: "clickByText",
+        extractParams: (e) => ({ text: e[1] }),
+      },
+      {
+        pattern: /^click\s+on\s+["']([^"']+)["']$/i,
+        action: "clickByText",
+        extractParams: (e) => ({ text: e[1] }),
+      },
+      { pattern: /^new\s+tab$/i, action: "newTab" },
+      { pattern: /^close\s+tab$/i, action: "closeTab" },
+      { pattern: /^duplicate\s+tab$/i, action: "duplicateTab" },
+      { pattern: /^reopen\s+(?:closed\s+)?tab$/i, action: "reopenTab" },
+      { pattern: /^mute\s+tab$/i, action: "muteTab" },
+      { pattern: /^unmute\s+tab$/i, action: "muteTab" },
+      {
+        pattern: /^(mute|unmute)\s+tab$/i,
+        action: "muteTab",
+        extractParams: (e) => ({ state: e[1].toLowerCase() }),
+      },
+      {
+        pattern: /^(pin|unpin)\s+tab$/i,
+        action: "pinTab",
+        extractParams: (e) => ({ state: e[1].toLowerCase() }),
+      },
+      { pattern: /^new\s+window$/i, action: "newWindow" },
+      { pattern: /^new\s+incognito$/i, action: "newIncognito" },
+      { pattern: /^close\s+window$/i, action: "closeWindow" },
+      { pattern: /^minimize(?:\s+window)?$/i, action: "minimize" },
+      { pattern: /^maximize(?:\s+window)?$/i, action: "maximize" },
+      { pattern: /^fullscreen$/i, action: "fullscreen" },
+      { pattern: /^zoom\s+in$/i, action: "zoomIn" },
+      { pattern: /^zoom\s+out$/i, action: "zoomOut" },
+      { pattern: /^reset\s+zoom$/i, action: "zoomReset" },
+      { pattern: /^print(?:.*?)$/i, action: "print" },
+      { pattern: /^save\s+page$/i, action: "savePage" },
+      {
+        pattern: /^find\s+(.+)$/i,
+        action: "findInPage",
+        extractParams: (e) => ({ text: e[1] }),
+      },
+      { pattern: /^(?:open\s+)?dev\s?tools$/i, action: "openDevTools" },
+      { pattern: /^(?:open\s+)?history$/i, action: "openHistory" },
+      { pattern: /^(?:open\s+)?downloads$/i, action: "openDownloads" },
+      { pattern: /^(?:open\s+)?settings$/i, action: "openSettings" },
+      { pattern: /^play$/i, action: "mediaPlay" },
+      { pattern: /^pause$/i, action: "mediaPause" },
+      { pattern: /^(?:enter|exit)\s+fullscreen$/i, action: "mediaFullscreen" },
+      { pattern: /^submit(?:.*?)$/i, action: "submit" },
+      { pattern: /^clear\s+(?:the\s+)?field$/i, action: "clearField" },
+      { pattern: /^select\s+all$/i, action: "selectAll" },
+    ];
+  async function s(e, t) {
+    let { url: n } = e;
+    return (
+      n.startsWith("http://") ||
+        n.startsWith("https://") ||
+        (n = "https://" + n),
+      await chrome.tabs.update(t, { url: n }),
+      { success: !0, message: `Navigating to ${n}` }
+    );
+  }
+  async function o(e, t, n) {
+    try {
+      switch (e) {
+        case "new":
+          await chrome.tabs.create({ url: "chrome://newtab" });
+          break;
+        case "close":
+          await chrome.tabs.remove(n);
+          break;
+        case "duplicate":
+          await chrome.tabs.duplicate(n);
+          break;
+        case "reopen":
+          if (!chrome.sessions || !chrome.sessions.restore)
+            return { success: !1, error: "Session restore not available" };
+          await chrome.sessions.restore();
+          break;
+        case "mute":
+          await chrome.tabs.update(n, { muted: !0 });
+          break;
+        case "unmute":
+          await chrome.tabs.update(n, { muted: !1 });
+          break;
+        case "pin":
+          await chrome.tabs.update(n, { pinned: !0 });
+          break;
+        case "unpin":
+          await chrome.tabs.update(n, { pinned: !1 });
+          break;
+        case "newWindow":
+          await chrome.windows.create({ incognito: "true" === t.incognito });
+          break;
+        case "closeWindow":
+          const e = await chrome.windows.getCurrent();
+          e.id && (await chrome.windows.remove(e.id));
+          break;
+        default:
+          return { success: !1, error: "Unknown tab sub-action" };
+      }
+      return { success: !0, message: `Tab action '${e}' completed` };
+    } catch (e) {
+      return { success: !1, error: e.message };
+    }
+  }
+  async function a(e, t) {
+    if (0 === e) await chrome.tabs.setZoom(t, 0);
+    else {
+      const n = await chrome.tabs.getZoom(t);
+      await chrome.tabs.setZoom(t, n * e);
+    }
+    return { success: !0, message: "Zoom updated" };
+  }
+  async function r(e, t) {
+    return (
+      await chrome.scripting.executeScript({
+        target: { tabId: t },
+        func: (e) => {
+          const t = document.querySelector("video, audio");
+          t &&
+            ("play" === e && t.play(),
+            "pause" === e && t.pause(),
+            "fullscreen" === e &&
+              (document.fullscreenElement
+                ? document.exitFullscreen()
+                : t.requestFullscreen()));
+        },
+        args: [e],
+      }),
+      { success: !0, message: `Media ${e}` }
+    );
+  }
+  async function i(e, t) {
+    return (
+      await chrome.scripting.executeScript({
+        target: { tabId: t },
+        func: (e) => {
+          const t = document.activeElement;
+          ("clear" === e &&
+            (t instanceof HTMLInputElement ||
+              t instanceof HTMLTextAreaElement) &&
+            (t.value = ""),
+            "selectAll" === e &&
+              (t instanceof HTMLInputElement ||
+                t instanceof HTMLTextAreaElement) &&
+              t.select(),
+            "submit" === e &&
+              (t instanceof HTMLFormElement
+                ? t.submit()
+                : t.closest("form")?.submit()));
+        },
+        args: [e],
+      }),
+      { success: !0, message: `Form ${e}` }
+    );
+  }
+  async function c(e) {
+    const {
+      provider: t,
+      apiKey: n,
+      model: s,
+      systemPrompt: o,
+      userMessage: a,
+      maxTokens: r = 1e3,
+      temperature: i = 0.7,
+    } = e;
+    if (!n) throw new Error("API key is required");
+    switch (t) {
+      case "claude":
+        return (async function (e, t, n, s, o, a) {
+          const r = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": e,
+              "anthropic-version": "2023-06-01",
+              "anthropic-dangerous-direct-browser-access": "true",
+            },
+            body: JSON.stringify({
+              model: t,
+              max_tokens: o,
+              temperature: a,
+              system: n,
+              messages: [{ role: "user", content: s }],
+            }),
+          });
+          if (!r.ok) {
+            const e = await r.text();
+            throw (
+              console.error("[AIClient] Claude API error:", e),
+              new Error(`Claude API error: ${r.status} - ${e}`)
+            );
+          }
+          const i = await r.json();
+          if (!i.content || !i.content[0] || !i.content[0].text)
+            throw new Error("Invalid response from Claude API");
+          return i.content[0].text;
+        })(n, s, o, a, r, i);
+      case "openai":
+        return (async function (e, t, n, s, o, a) {
+          const r = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${e}`,
+            },
+            body: JSON.stringify({
+              model: t,
+              max_tokens: o,
+              temperature: a,
+              messages: [
+                { role: "system", content: n },
+                { role: "user", content: s },
+              ],
+            }),
+          });
+          if (!r.ok) {
+            const e = await r.text();
+            throw (
+              console.error("[AIClient] OpenAI API error:", e),
+              new Error(`OpenAI API error: ${r.status} - ${e}`)
+            );
+          }
+          const i = await r.json();
+          if (!i.choices || !i.choices[0] || !i.choices[0].message)
+            throw new Error("Invalid response from OpenAI API");
+          return i.choices[0].message.content;
+        })(n, s, o, a, r, i);
+      default:
+        throw new Error(`Unknown AI provider: ${t}`);
+    }
+  }
+  new (class {
+    constructor(e = 10, t = 6e4) {
+      ((this.requests = []), (this.maxRequests = e), (this.windowMs = t));
+    }
+    canProceed() {
+      const e = Date.now();
+      return (
+        (this.requests = this.requests.filter((t) => e - t < this.windowMs)),
+        !(
+          this.requests.length >= this.maxRequests || (this.requests.push(e), 0)
+        )
+      );
+    }
+    getWaitTime() {
+      return this.requests.length < this.maxRequests
+        ? 0
+        : Math.min(...this.requests) + this.windowMs - Date.now();
+    }
+  })(10, 6e4);
+  const l = [
+      { pattern: /fetch\s*\(/gi, reason: "Network requests are not allowed" },
+      {
+        pattern: /XMLHttpRequest/gi,
+        reason: "Network requests are not allowed",
+      },
+      { pattern: /\.ajax\s*\(/gi, reason: "Network requests are not allowed" },
+      { pattern: /axios\./gi, reason: "Network requests are not allowed" },
+      {
+        pattern: /navigator\.sendBeacon/gi,
+        reason: "Network requests are not allowed",
+      },
+      {
+        pattern: /WebSocket/gi,
+        reason: "WebSocket connections are not allowed",
+      },
+      { pattern: /document\.cookie/gi, reason: "Cookie access is not allowed" },
+      {
+        pattern: /localStorage/gi,
+        reason: "localStorage access is not allowed",
+      },
+      {
+        pattern: /sessionStorage/gi,
+        reason: "sessionStorage access is not allowed",
+      },
+      { pattern: /indexedDB/gi, reason: "IndexedDB access is not allowed" },
+      { pattern: /caches\./gi, reason: "Cache API access is not allowed" },
+      { pattern: /eval\s*\(/gi, reason: "eval() is not allowed" },
+      {
+        pattern: /Function\s*\(/gi,
+        reason: "Function constructor is not allowed",
+      },
+      {
+        pattern: /setTimeout\s*\(\s*['"`]/gi,
+        reason: "setTimeout with string argument is not allowed",
+      },
+      {
+        pattern: /setInterval\s*\(\s*['"`]/gi,
+        reason: "setInterval with string argument is not allowed",
+      },
+      { pattern: /<script/gi, reason: "Script injection is not allowed" },
+      { pattern: /javascript:/gi, reason: "javascript: URLs are not allowed" },
+      {
+        pattern: /data:text\/html/gi,
+        reason: "data: HTML URLs are not allowed",
+      },
+      {
+        pattern: /chrome\.\w+/gi,
+        reason: "Chrome extension APIs are not allowed in injected code",
+      },
+      {
+        pattern: /browser\.\w+/gi,
+        reason: "Browser APIs are not allowed in injected code",
+      },
+    ],
+    u = [
+      {
+        pattern: /\b(pay|purchase|buy|checkout|order|subscribe|billing)\b/gi,
+        message: "This action involves a payment or purchase",
+      },
+      {
+        pattern:
+          /\b(delete|remove|cancel|unsubscribe|close\s*account|deactivate)\b/gi,
+        message: "This action may delete or remove data",
+      },
+      {
+        pattern: /\b(password|credit\s*card|ssn|social\s*security)\b/gi,
+        message: "This action involves sensitive data",
+      },
+      {
+        pattern: /\.submit\s*\(\s*\)/gi,
+        message: "This action will submit a form",
+      },
+    ];
+  function d(e, t) {
+    for (const { pattern: t, reason: n } of l)
+      if (((t.lastIndex = 0), t.test(e)))
+        return {
+          safe: !1,
+          blocked: e.match(t)?.[0] || "unknown",
+          blockedReason: n,
+        };
+    const n = [];
+    for (const { pattern: t, message: s } of u)
+      ((t.lastIndex = 0), t.test(e) && n.push(s));
+    return n.length > 0
+      ? {
+          safe: !0,
+          requiresConfirmation: !0,
+          confirmationMessage: `This action has been flagged for review:\n- ${n.join("\n- ")}\n\nDo you want to proceed?`,
+          flaggedPatterns: n,
+        }
+      : { safe: !0 };
+  }
+  const m = [];
+  let p = !1;
+  function g(e = 5) {
+    const t = Date.now();
+    return m.filter((n) => t - n.timestamp < 1e3 * e);
+  }
+  async function h(e, t) {
+    try {
+      switch (
+        (console.log("[Executor] Executing action:", e.actionType, e.selector),
+        e.actionType)
+      ) {
+        case "click":
+          return (async function (e, t) {
+            const n = await chrome.scripting.executeScript({
+                target: { tabId: t },
+                func: (e) => {
+                  const t = window.__aiAgentElementMap;
+                  let n = t?.get(e);
+                  if ((!n && e && (n = document.querySelector(e)), !n && e)) {
+                    const t = document.querySelectorAll(
+                      'button, a, [role="button"], input[type="submit"]',
+                    );
+                    for (const s of t)
+                      if (
+                        s.textContent?.toLowerCase().includes(e.toLowerCase())
+                      ) {
+                        n = s;
+                        break;
+                      }
+                  }
+                  if (!n)
+                    return { success: !1, error: `Element not found: ${e}` };
+                  n.scrollIntoView({ behavior: "smooth", block: "center" });
+                  const s = n,
+                    o = s.style.outline;
+                  return (
+                    (s.style.outline = "3px solid #4CAF50"),
+                    setTimeout(() => {
+                      ((s.style.outline = o), s.click());
+                    }, 300),
+                    { success: !0 }
+                  );
+                },
+                args: [e],
+              }),
+              s = n[0]?.result;
+            return s?.success
+              ? { success: !0, message: `Clicked ${e}` }
+              : { success: !1, error: s?.error || "Click failed" };
+          })(e.selector || "", t);
+        case "fill":
+          return (async function (e, t, n) {
+            const s = await chrome.scripting.executeScript({
+                target: { tabId: n },
+                func: (e, t) => {
+                  const n = window.__aiAgentElementMap;
+                  let s = n?.get(e) || document.querySelector(e);
+                  return (
+                    s ||
+                      (s = document.querySelector(
+                        `input[placeholder*="${e}" i], input[name*="${e}" i], textarea[placeholder*="${e}" i]`,
+                      )),
+                    s &&
+                    (s instanceof HTMLInputElement ||
+                      s instanceof HTMLTextAreaElement)
+                      ? (s.focus(),
+                        (s.value = t),
+                        s.dispatchEvent(new Event("input", { bubbles: !0 })),
+                        s.dispatchEvent(new Event("change", { bubbles: !0 })),
+                        { success: !0 })
+                      : { success: !1, error: `Input not found: ${e}` }
+                  );
+                },
+                args: [e, t],
+              }),
+              o = s[0]?.result;
+            return o?.success
+              ? { success: !0, message: `Filled ${e}` }
+              : { success: !1, error: o?.error || "Fill failed" };
+          })(e.selector || "", e.code, t);
+        case "scroll":
+          return (async function (e, t) {
+            return (
+              await chrome.scripting.executeScript({
+                target: { tabId: t },
+                func: (e) => {
+                  const t = 400,
+                    n = (e) => {
+                      const t = window.getComputedStyle(e);
+                      return (
+                        ("auto" === t.overflowY || "scroll" === t.overflowY) &&
+                        e.scrollHeight > e.clientHeight
+                      );
+                    },
+                    s = (() => {
+                      if (document.activeElement && n(document.activeElement))
+                        return document.activeElement;
+                      let e = null,
+                        t = 0;
+                      return (
+                        document.querySelectorAll("*").forEach((s) => {
+                          if (n(s)) {
+                            const n = s.getBoundingClientRect(),
+                              o = n.width * n.height;
+                            o > t && o > 2e4 && ((t = o), (e = s));
+                          }
+                        }),
+                        e || window
+                      );
+                    })(),
+                    o = s === window,
+                    a = s;
+                  switch (e.toLowerCase()) {
+                    case "down":
+                      o
+                        ? window.scrollBy({ top: t, behavior: "smooth" })
+                        : a.scrollBy({ top: t, behavior: "smooth" });
+                      break;
+                    case "up":
+                      o
+                        ? window.scrollBy({ top: -400, behavior: "smooth" })
+                        : a.scrollBy({ top: -400, behavior: "smooth" });
+                      break;
+                    case "top":
+                      o
+                        ? window.scrollTo({ top: 0, behavior: "smooth" })
+                        : a.scrollTo({ top: 0, behavior: "smooth" });
+                      break;
+                    case "bottom":
+                      o
+                        ? window.scrollTo({
+                            top: document.body.scrollHeight,
+                            behavior: "smooth",
+                          })
+                        : a.scrollTo({
+                            top: a.scrollHeight,
+                            behavior: "smooth",
+                          });
+                  }
+                },
+                args: [e],
+              }),
+              { success: !0, message: `Scrolled ${e}` }
+            );
+          })(e.code, t);
+        case "navigate":
+          return (async function (e, t) {
+            let n = e.trim();
+            return (
+              n.startsWith("http://") ||
+                n.startsWith("https://") ||
+                (n = "https://" + n),
+              await chrome.tabs.update(t, { url: n }),
+              { success: !0, message: `Navigating to ${n}` }
+            );
+          })(e.code, t);
+        case "extract":
+          return (async function (e, t, n) {
+            const s = await chrome.scripting.executeScript({
+                target: { tabId: t },
+                func: (e, t) => {
+                  const n = document.querySelector(e) || document.body;
+                  return t && "text" !== t
+                    ? "html" === t || "outerHTML" === t
+                      ? { text: n.outerHTML }
+                      : "innerHTML" === t
+                        ? { text: n.innerHTML }
+                        : "style" === t
+                          ? { text: window.getComputedStyle(n).cssText }
+                          : "attributes" === t
+                            ? {
+                                text: Array.from(n.attributes)
+                                  .map((e) => `${e.name}="${e.value}"`)
+                                  .join(" "),
+                              }
+                            : { text: n.getAttribute(t) || "" }
+                    : { text: n.innerText?.slice(0, 1e3) };
+                },
+                args: [e, n],
+              }),
+              o = s[0]?.result;
+            return { success: !0, message: o?.text || "No content extracted" };
+          })(
+            e.selector || "",
+            t,
+            "string" == typeof e.value ? e.value : void 0,
+          );
+        case "modify":
+          return (async function (e, t) {
+            return (
+              await chrome.scripting.executeScript({
+                target: { tabId: t },
+                func: (e) => {
+                  try {
+                    const t = JSON.parse(e),
+                      n = "ai-agent-mod-" + Date.now();
+                    let s = "";
+                    if (
+                      ("enlarge-text" === t.type
+                        ? (s = `body * { font-size: ${t.scale || 1.2}em !important; }`)
+                        : "bold-text" === t.type
+                          ? (s =
+                              "body p, body span, body div { font-weight: 600 !important; }")
+                          : "high-contrast" === t.type
+                            ? (s = "body { filter: contrast(1.2) !important; }")
+                            : t.css && (s = t.css),
+                      s)
+                    ) {
+                      const e = document.createElement("style");
+                      ((e.id = n),
+                        (e.textContent = s),
+                        document.head.appendChild(e));
+                    }
+                  } catch {
+                    const t = document.createElement("style");
+                    ((t.id = "ai-agent-mod-" + Date.now()),
+                      (t.textContent = e),
+                      document.head.appendChild(t));
+                  }
+                },
+                args: [e],
+              }),
+              { success: !0, message: "Style applied" }
+            );
+          })(e.code, t);
+        case "tab":
+          return (async function (e, t, n) {
+            try {
+              const t = JSON.parse(e),
+                s = t.action;
+              switch (s) {
+                case "new":
+                  return (
+                    await chrome.tabs.create({
+                      url: t.url || "chrome://newtab",
+                    }),
+                    { success: !0, message: "Opened new tab" }
+                  );
+                case "close":
+                  return (
+                    await chrome.tabs.remove(n),
+                    { success: !0, message: "Closed tab" }
+                  );
+                case "duplicate":
+                  return (
+                    await chrome.tabs.duplicate(n),
+                    { success: !0, message: "Duplicated tab" }
+                  );
+                case "reload":
+                  return (
+                    await chrome.tabs.reload(n),
+                    { success: !0, message: "Reloaded tab" }
+                  );
+                case "mute":
+                  return (
+                    await chrome.tabs.update(n, { muted: !0 }),
+                    { success: !0, message: "Muted tab" }
+                  );
+                case "unmute":
+                  return (
+                    await chrome.tabs.update(n, { muted: !1 }),
+                    { success: !0, message: "Unmuted tab" }
+                  );
+                case "pin":
+                  return (
+                    await chrome.tabs.update(n, { pinned: !0 }),
+                    { success: !0, message: "Pinned tab" }
+                  );
+                case "unpin":
+                  return (
+                    await chrome.tabs.update(n, { pinned: !1 }),
+                    { success: !0, message: "Unpinned tab" }
+                  );
+                case "newWindow":
+                  return (
+                    await chrome.windows.create({
+                      url: t.url,
+                      incognito: t.incognito,
+                    }),
+                    { success: !0, message: "Opened new window" }
+                  );
+                case "closeWindow":
+                  const e = await chrome.windows.getCurrent();
+                  return (
+                    e.id && (await chrome.windows.remove(e.id)),
+                    { success: !0, message: "Closed window" }
+                  );
+                case "minimize":
+                  const o = await chrome.windows.getCurrent();
+                  return (
+                    o.id &&
+                      (await chrome.windows.update(o.id, {
+                        state: "minimized",
+                      })),
+                    { success: !0, message: "Minimized window" }
+                  );
+                case "maximize":
+                  const a = await chrome.windows.getCurrent();
+                  return (
+                    a.id &&
+                      (await chrome.windows.update(a.id, {
+                        state: "maximized",
+                      })),
+                    { success: !0, message: "Maximized window" }
+                  );
+                case "fullscreen":
+                  const r = await chrome.windows.getCurrent();
+                  return (
+                    r.id &&
+                      (await chrome.windows.update(r.id, {
+                        state: "fullscreen",
+                      })),
+                    { success: !0, message: "Fullscreen window" }
+                  );
+                default:
+                  return { success: !1, error: `Unknown tab action: ${s}` };
+              }
+            } catch (e) {
+              return {
+                success: !1,
+                error: e instanceof Error ? e.message : "Tab action failed",
+              };
+            }
+          })(e.code, e.selector, t);
+        case "keyboard":
+          return (async function (e, t, n) {
+            try {
+              const s = JSON.parse(e),
+                o = await chrome.scripting.executeScript({
+                  target: { tabId: n },
+                  func: (e, t) => {
+                    const n = ((e) => {
+                      if (!e) return document.activeElement || document.body;
+                      const t = window.__aiAgentElementMap;
+                      return (
+                        t?.get(e) ||
+                        document.querySelector(e) ||
+                        document.activeElement ||
+                        document.body
+                      );
+                    })(t);
+                    if (!n) return { success: !1, error: "Target not found" };
+                    if ((n.focus(), "type" === e.action)) {
+                      const t = e.text || "";
+                      if (
+                        n instanceof HTMLInputElement ||
+                        n instanceof HTMLTextAreaElement
+                      ) {
+                        const e = n.selectionStart || 0,
+                          s = n.selectionEnd || 0,
+                          o = n.value;
+                        ((n.value = o.substring(0, e) + t + o.substring(s)),
+                          (n.selectionStart = n.selectionEnd = e + t.length));
+                      } else n.innerText += t;
+                      (n.dispatchEvent(new Event("input", { bubbles: !0 })),
+                        n.dispatchEvent(new Event("change", { bubbles: !0 })));
+                    } else if ("press" === e.action) {
+                      const t = e.keys,
+                        s = {
+                          ctrlKey: t.toLowerCase().includes("ctrl"),
+                          altKey: t.toLowerCase().includes("alt"),
+                          shiftKey: t.toLowerCase().includes("shift"),
+                          metaKey:
+                            t.toLowerCase().includes("meta") ||
+                            t.toLowerCase().includes("cmd"),
+                        };
+                      let o = 0,
+                        a = "";
+                      t.toLowerCase().includes("enter")
+                        ? ((o = 13), (a = "Enter"))
+                        : t.toLowerCase().includes("backspace")
+                          ? ((o = 8), (a = "Backspace"))
+                          : t.toLowerCase().includes("delete")
+                            ? ((o = 46), (a = "Delete"))
+                            : t.toLowerCase().includes("tab")
+                              ? ((o = 9), (a = "Tab"))
+                              : t.toLowerCase().includes("escape")
+                                ? ((o = 27), (a = "Escape"))
+                                : t.toLowerCase().includes("arrowleft")
+                                  ? ((o = 37), (a = "ArrowLeft"))
+                                  : t.toLowerCase().includes("arrowup")
+                                    ? ((o = 38), (a = "ArrowUp"))
+                                    : t.toLowerCase().includes("arrowright")
+                                      ? ((o = 39), (a = "ArrowRight"))
+                                      : t.toLowerCase().includes("arrowdown")
+                                        ? ((o = 40), (a = "ArrowDown"))
+                                        : (a = t.replace(
+                                            /ctrl\+|alt\+|shift\+|meta\+/gi,
+                                            "",
+                                          ));
+                      const r = {
+                        key: a,
+                        code: a,
+                        keyCode: o,
+                        which: o,
+                        bubbles: !0,
+                        cancelable: !0,
+                        composed: !0,
+                        ...s,
+                      };
+                      (n.dispatchEvent(new KeyboardEvent("keydown", r)),
+                        n.dispatchEvent(new KeyboardEvent("keypress", r)),
+                        n.dispatchEvent(new KeyboardEvent("keyup", r)),
+                        "Enter" === a &&
+                          (n instanceof HTMLInputElement ||
+                            "BUTTON" === n.tagName) &&
+                          ("BUTTON" === n.tagName || "submit" === n.type
+                            ? n.click()
+                            : n.closest("form")?.submit()));
+                    } else if ("copy" === e.action)
+                      document.execCommand("copy");
+                    else if ("cut" === e.action) document.execCommand("cut");
+                    else if ("paste" === e.action) {
+                      if (!document.execCommand("paste"))
+                        return {
+                          success: !1,
+                          error: "Paste requires clipboard permission",
+                        };
+                    } else
+                      "selectAll" === e.action
+                        ? n instanceof HTMLInputElement ||
+                          n instanceof HTMLTextAreaElement
+                          ? n.select()
+                          : document.execCommand("selectAll")
+                        : "clear" === e.action &&
+                          (n instanceof HTMLInputElement ||
+                            n instanceof HTMLTextAreaElement) &&
+                          ((n.value = ""),
+                          n.dispatchEvent(new Event("input", { bubbles: !0 })),
+                          n.dispatchEvent(
+                            new Event("change", { bubbles: !0 }),
+                          ));
+                    return { success: !0 };
+                  },
+                  args: [s, t],
+                }),
+                a = o[0]?.result;
+              return a?.success
+                ? { success: !0, message: "Keyboard action executed" }
+                : {
+                    success: !1,
+                    error: a?.error || "Keyboard execution failed",
+                  };
+            } catch (e) {
+              return {
+                success: !1,
+                error: e instanceof Error ? e.message : "Keyboard action error",
+              };
+            }
+          })(e.code, e.selector || "", t);
+        case "browser":
+          return (async function (e, t) {
+            try {
+              const n = JSON.parse(e),
+                s = n.action;
+              switch (s) {
+                case "zoom":
+                  const e = n.level ? n.level / 100 : 0;
+                  return (
+                    await chrome.tabs.setZoom(t, e),
+                    { success: !0, message: `Zoom set to ${n.level || 100}%` }
+                  );
+                case "print":
+                  return (
+                    await chrome.scripting.executeScript({
+                      target: { tabId: t },
+                      func: () => window.print(),
+                    }),
+                    { success: !0, message: "Print dialog opened" }
+                  );
+                case "history":
+                  return (
+                    await chrome.tabs.create({ url: "chrome://history" }),
+                    { success: !0, message: "Opened history" }
+                  );
+                case "downloads":
+                  return (
+                    await chrome.tabs.create({ url: "chrome://downloads" }),
+                    { success: !0, message: "Opened downloads" }
+                  );
+                case "settings":
+                  return (
+                    await chrome.tabs.create({ url: "chrome://settings" }),
+                    { success: !0, message: "Opened settings" }
+                  );
+                case "extensions":
+                  return (
+                    await chrome.tabs.create({ url: "chrome://extensions" }),
+                    { success: !0, message: "Opened extensions" }
+                  );
+                case "searchScripts":
+                  const o = n.keyword || "",
+                    a = await chrome.scripting.executeScript({
+                      target: { tabId: t },
+                      func: (e) =>
+                        Array.from(document.scripts)
+                          .map((t, n) =>
+                            t.src.includes(e)
+                              ? `Script ${n} (SRC): ${t.src}`
+                              : t.textContent?.includes(e)
+                                ? `Script ${n} (INLINE): ...${t.textContent.substring(Math.max(0, t.textContent.indexOf(e) - 50), t.textContent.indexOf(e) + 100).replace(/\s+/g, " ")}...`
+                                : null,
+                          )
+                          .filter(Boolean),
+                      args: [o],
+                    }),
+                    r = a[0]?.result || [];
+                  return {
+                    success: !0,
+                    message:
+                      r.length > 0
+                        ? `Found ${r.length} matches:\n${r.join("\n")}`
+                        : `No scripts found containing "${o}"`,
+                  };
+                case "monitorNetwork":
+                  const i = "number" == typeof n.seconds ? n.seconds : 5,
+                    c = g(i);
+                  return {
+                    success: !0,
+                    message:
+                      c.length > 0
+                        ? `Captured ${c.length} requests in last ${i}s:\n${c.map((e) => `${e.method} ${e.url}`).join("\n")}`
+                        : `No network requests captured in last ${i}s`,
+                  };
+                case "devtools":
+                  return {
+                    success: !0,
+                    message: "Please press F12 to open DevTools",
+                  };
+                case "screenshot":
+                  return (
+                    await chrome.tabs.captureVisibleTab(),
+                    { success: !0, message: "Screenshot captured" }
+                  );
+                default:
+                  return { success: !1, error: `Unknown browser action: ${s}` };
+              }
+            } catch (e) {
+              return {
+                success: !1,
+                error: e instanceof Error ? e.message : "Browser action failed",
+              };
+            }
+          })(e.code, t);
+        default:
+          return (async function (e, t) {
+            try {
+              const n = await chrome.scripting.executeScript({
+                  target: { tabId: t },
+                  func: (e) => {
+                    try {
+                      return (new Function(e)(), { success: !0 });
+                    } catch (e) {
+                      return { success: !1, error: e.message };
+                    }
+                  },
+                  args: [e],
+                }),
+                s = n[0]?.result;
+              return s?.success
+                ? { success: !0, message: "Code executed" }
+                : { success: !1, error: s?.error || "Execution failed" };
+            } catch (e) {
+              return { success: !1, error: "Code execution blocked" };
+            }
+          })(e.code, t);
+      }
+    } catch (e) {
+      return (
+        console.error("[Executor] Action execution error:", e),
+        {
+          success: !1,
+          error: e instanceof Error ? e.message : "Execution failed",
+        }
+      );
+    }
+  }
+  function f() {
+    const e = [];
+    let t = 0;
+    const n = new Map();
+    (document
+      .querySelectorAll(
+        [
+          "a[href]",
+          "button",
+          "input",
+          "select",
+          "textarea",
+          '[role="button"]',
+          '[role="link"]',
+          "[onclick]",
+        ].join(","),
+      )
+      .forEach((s) => {
+        const o = s.getBoundingClientRect(),
+          a = window.getComputedStyle(s);
+        if (
+          o.width > 0 &&
+          o.height > 0 &&
+          "none" !== a.display &&
+          "hidden" !== a.visibility &&
+          o.top < window.innerHeight
+        ) {
+          const a = "el-" + t++;
+          (n.set(a, s),
+            e.push({
+              id: a,
+              tagName: s.tagName.toLowerCase(),
+              text: (s.textContent || "").trim().slice(0, 100),
+              attributes: {
+                id: s.id || void 0,
+                href: s.getAttribute("href") || void 0,
+                type: s.getAttribute("type") || void 0,
+                placeholder: s.getAttribute("placeholder") || void 0,
+                ariaLabel: s.getAttribute("aria-label") || void 0,
+                name: s.getAttribute("name") || void 0,
+              },
+              isInteractive: !0,
+              boundingBox: {
+                x: Math.round(o.x),
+                y: Math.round(o.y),
+                width: Math.round(o.width),
+                height: Math.round(o.height),
+              },
+            }));
+        }
+      }),
+      (window.__aiAgentElementMap = n));
+    const s = document.querySelector("main, article") || document.body;
+    return {
+      url: window.location.href,
+      title: document.title,
+      timestamp: Date.now(),
+      elements: e,
+      pageText: s.innerText?.slice(0, 2e3) || "",
+    };
+  }
+  async function b(e, t, l, u) {
+    const m = { stage: "idle", command: e };
+    try {
+      const g = await chrome.tabs.get(t);
+      if (
+        !(p = g.url) ||
+        (!p.startsWith("http://") && !p.startsWith("https://"))
+      )
+        return (
+          await chrome.tabs.update(t, { url: "https://www.google.com" }),
+          {
+            success: !0,
+            message:
+              "Navigated to Google. You can now give me commands to interact with the page.",
+          }
+        );
+      m.stage = "fast-path";
+      const b = (function (e) {
+        const t = e.trim();
+        for (const e of n) {
+          const n = t.match(e.pattern);
+          if (n) {
+            const t = e.extractParams ? e.extractParams(n) : {};
+            return { matched: !0, action: e.action, params: t };
+          }
+        }
+        return { matched: !1 };
+      })(e);
+      if (b.matched) {
+        console.log("[Pipeline] Fast-path matched:", b.action);
+        const e = await (async function (e, t, n) {
+          try {
+            switch (e) {
+              case "scroll":
+                return (async function (e, t) {
+                  const { direction: n, amount: s } = e,
+                    o = parseInt(s || "400", 10);
+                  return (
+                    await chrome.scripting.executeScript({
+                      target: { tabId: t },
+                      func: (e, t) => {
+                        const n = (e) => {
+                            const t = window.getComputedStyle(e);
+                            return (
+                              ("auto" === t.overflowY ||
+                                "scroll" === t.overflowY) &&
+                              e.scrollHeight > e.clientHeight
+                            );
+                          },
+                          s = (() => {
+                            if (
+                              document.activeElement &&
+                              n(document.activeElement)
+                            )
+                              return document.activeElement;
+                            let e = null,
+                              t = 0;
+                            return (
+                              document.querySelectorAll("*").forEach((s) => {
+                                if (n(s)) {
+                                  const n = s.getBoundingClientRect(),
+                                    o = n.width * n.height;
+                                  o > t && o > 2e4 && ((t = o), (e = s));
+                                }
+                              }),
+                              e || window
+                            );
+                          })(),
+                          o = s === window,
+                          a = s;
+                        switch (e) {
+                          case "down":
+                            o
+                              ? window.scrollBy({ top: t, behavior: "smooth" })
+                              : a.scrollBy({ top: t, behavior: "smooth" });
+                            break;
+                          case "up":
+                            o
+                              ? window.scrollBy({ top: -t, behavior: "smooth" })
+                              : a.scrollBy({ top: -t, behavior: "smooth" });
+                            break;
+                          case "top":
+                            o
+                              ? window.scrollTo({ top: 0, behavior: "smooth" })
+                              : a.scrollTo({ top: 0, behavior: "smooth" });
+                            break;
+                          case "bottom":
+                            o
+                              ? window.scrollTo({
+                                  top: document.body.scrollHeight,
+                                  behavior: "smooth",
+                                })
+                              : a.scrollTo({
+                                  top: a.scrollHeight,
+                                  behavior: "smooth",
+                                });
+                        }
+                        return { success: !0 };
+                      },
+                      args: [n, o],
+                    }),
+                    { success: !0, message: `Scrolled ${n}` }
+                  );
+                })(t, n);
+              case "goBack":
+                return (async function (e) {
+                  return (
+                    await chrome.scripting.executeScript({
+                      target: { tabId: e },
+                      func: () => {
+                        window.history.back();
+                      },
+                    }),
+                    { success: !0, message: "Navigated back" }
+                  );
+                })(n);
+              case "goForward":
+                return (async function (e) {
+                  return (
+                    await chrome.scripting.executeScript({
+                      target: { tabId: e },
+                      func: () => {
+                        window.history.forward();
+                      },
+                    }),
+                    { success: !0, message: "Navigated forward" }
+                  );
+                })(n);
+              case "reload":
+                return (async function (e) {
+                  return (
+                    await chrome.tabs.reload(e),
+                    { success: !0, message: "Page reloaded" }
+                  );
+                })(n);
+              case "navigate":
+                return s(t, n);
+              case "clickByText":
+                return (async function (e, t) {
+                  const { text: n } = e,
+                    s = await chrome.scripting.executeScript({
+                      target: { tabId: t },
+                      func: (e) => {
+                        const t = document.querySelectorAll(
+                          'button, a, [role="button"], input[type="submit"], input[type="button"]',
+                        );
+                        for (const n of t) {
+                          const t = n.textContent?.trim() || "",
+                            s = n.getAttribute("aria-label") || "",
+                            o = n.value || "";
+                          if (
+                            t.toLowerCase() === e.toLowerCase() ||
+                            s.toLowerCase() === e.toLowerCase() ||
+                            o.toLowerCase() === e.toLowerCase()
+                          ) {
+                            n.scrollIntoView({
+                              behavior: "smooth",
+                              block: "center",
+                            });
+                            const e = n,
+                              t = e.style.outline;
+                            return (
+                              (e.style.outline = "3px solid #4CAF50"),
+                              setTimeout(() => {
+                                e.style.outline = t;
+                              }, 500),
+                              setTimeout(() => {
+                                n.click();
+                              }, 300),
+                              { success: !0, found: !0 }
+                            );
+                          }
+                        }
+                        return {
+                          success: !1,
+                          found: !1,
+                          error: `No element found with text "${e}"`,
+                        };
+                      },
+                      args: [n],
+                    }),
+                    o = s[0]?.result;
+                  return o?.found
+                    ? { success: !0, message: `Clicked "${n}"` }
+                    : {
+                        success: !1,
+                        error:
+                          o?.error || `Could not find element with text "${n}"`,
+                      };
+                })(t, n);
+              case "newTab":
+                return o("new", {}, n);
+              case "closeTab":
+                return o("close", {}, n);
+              case "duplicateTab":
+                return o("duplicate", {}, n);
+              case "reopenTab":
+                return o("reopen", {}, n);
+              case "muteTab":
+                return o("mute" === t.state ? "mute" : "unmute", {}, n);
+              case "pinTab":
+                return o("pin" === t.state ? "pin" : "unpin", {}, n);
+              case "newWindow":
+                return o("newWindow", {}, n);
+              case "newIncognito":
+                return o("newWindow", { incognito: "true" }, n);
+              case "closeWindow":
+                return o("closeWindow", {}, n);
+              case "minimize":
+                return o("minimize", {}, n);
+              case "maximize":
+                return o("maximize", {}, n);
+              case "fullscreen":
+                return o("fullscreen", {}, n);
+              case "zoomIn":
+                return a(1.1, n);
+              case "zoomOut":
+                return a(0.9, n);
+              case "zoomReset":
+                return a(0, n);
+              case "print":
+                return (async function (e, t) {
+                  return (
+                    await chrome.scripting.executeScript({
+                      target: { tabId: t },
+                      func: (e) => {
+                        window.eval(e);
+                      },
+                      args: ["window.print()"],
+                    }),
+                    { success: !0, message: "Executed" }
+                  );
+                })(0, n);
+              case "savePage":
+                return {
+                  success: !0,
+                  message: "Please use Ctrl+S to save (automation limited)",
+                };
+              case "findInPage":
+                return {
+                  success: !0,
+                  message: `Use Ctrl+F to find: ${t.text}`,
+                };
+              case "openDevTools":
+                return { success: !0, message: "Press F12 for DevTools" };
+              case "openHistory":
+                return s({ url: "chrome://history" }, n);
+              case "openDownloads":
+                return s({ url: "chrome://downloads" }, n);
+              case "openSettings":
+                return s({ url: "chrome://settings" }, n);
+              case "mediaPlay":
+                return r("play", n);
+              case "mediaPause":
+                return r("pause", n);
+              case "mediaFullscreen":
+                return r("fullscreen", n);
+              case "submit":
+                return i("submit", n);
+              case "clearField":
+                return i("clear", n);
+              case "selectAll":
+                return i("selectAll", n);
+              default:
+                return { success: !1, error: `Unknown fast-path action: ${e}` };
+            }
+          } catch (e) {
+            return {
+              success: !1,
+              error:
+                e instanceof Error ? e.message : "Fast-path execution failed",
+            };
+          }
+        })(b.action, b.params || {}, t);
+        return { success: e.success, message: e.message || "Action completed" };
+      }
+      let y;
+      m.stage = "intent";
+      try {
+        y = await (async function (e) {
+          try {
+            const t = await chrome.tabs.sendMessage(e, {
+              type: "GET_DOM_CONTEXT",
+              timestamp: Date.now(),
+            });
+            if (t?.success && t.data) return t.data;
+            console.warn(
+              "[Executor] Content script unavailable, falling back to inline parser",
+            );
+            const n = await chrome.scripting.executeScript({
+                target: { tabId: e },
+                func: f,
+              }),
+              s = n[0]?.result;
+            if (!s) throw new Error("Failed to get DOM context");
+            return s;
+          } catch (t) {
+            try {
+              const t = await chrome.scripting.executeScript({
+                  target: { tabId: e },
+                  func: f,
+                }),
+                n = t[0]?.result;
+              if (n) return n;
+            } catch {}
+            throw (
+              console.error("[Executor] Failed to get DOM context:", t),
+              t
+            );
+          }
+        })(t);
+      } catch (e) {
+        (console.warn(
+          "[Pipeline] Failed to get DOM context, using fallback:",
+          e,
+        ),
+          (y = {
+            url: g.url || "unknown",
+            title: g.title || "Unknown Page",
+            timestamp: Date.now(),
+            elements: [],
+            pageText:
+              "Page content not accessible (possibly restricted or loading).",
+            viewport: { width: 0, height: 0 },
+            documentSize: { width: 0, height: 0 },
+          }));
+      }
+      ((m.domContext = y), u.setDOMContext(y));
+      const x = await (async function (e, t, n) {
+        const s = t.pageSummary?.text || `Page: ${t.title}`,
+          o = t.spatialGrid?.textRepresentation || "",
+          a = t.elements
+            .filter((e) => e.isInteractive)
+            .map((e) => {
+              const t = [];
+              (e.attributes.ariaLabel &&
+                t.push(`aria-label="${e.attributes.ariaLabel}"`),
+                e.attributes.placeholder &&
+                  t.push(`placeholder="${e.attributes.placeholder}"`),
+                e.attributes.type && t.push(`type="${e.attributes.type}"`),
+                e.attributes.href &&
+                  t.push(`href="${e.attributes.href.slice(0, 50)}..."`));
+              let n = `[${e.id}] <${e.tagName}${t.length ? " " + t.join(" ") : ""}> "${e.text.slice(0, 50)}"`;
+              return (
+                e.relativePosition &&
+                  (n += ` | Position: ${e.relativePosition}`),
+                e.region && (n += ` [${e.region}]`),
+                e.contentFor &&
+                  (n += ` | FOR: ${e.contentFor.associationText}`),
+                n
+              );
+            })
+            .join("\n"),
+          r = (t.contentContainers || [])
+            .slice(0, 10)
+            .map(
+              (e, t) => `  ${t + 1}. [${e.containerType}] ${e.fullDescription}`,
+            )
+            .join("\n"),
+          i = `${s}\nURL: ${t.url}\n${o ? `\n${o}` : ""}\nInteractive elements on page:\n${a || "No interactive elements found"}\n${r ? `\nContent containers:\n${r}` : ""}\n\nUser command: "${e}"\n\nAnalyze if this command is clear and unambiguous. Use spatial position, content associations, and nearby element context to resolve references. If there are truly multiple possible targets, ask for clarification.`;
+        try {
+          const t = await c({
+              provider: n.provider,
+              apiKey: n.apiKey,
+              model: n.intentModel,
+              systemPrompt:
+                'You are an intent analyzer for a browser automation assistant. Your job is to determine if a user\'s command is clear enough to execute, or if clarification is needed.\n\nYou receive rich page context including:\n- A page summary with structure and landmarks\n- A spatial grid showing where interactive elements are located\n- Interactive elements with spatial position descriptions, nearby elements, and semantic context\n- Content containers (cards, list items, products) with associated buttons/links\n\nUse this context to:\n1. Determine if the intent is clear and unambiguous\n2. Identify the exact target element(s) using IDs, spatial descriptions, or content associations\n3. Check for multiple possible interpretations\n\nRespond with a JSON object:\n{\n  "clear": boolean,\n  "clarificationQuestion": string | null,\n  "clarificationOptions": string[] | null,\n  "parsedIntent": {\n    "action": "click" | "fill" | "scroll" | "navigate" | "extract" | "modify",\n    "target": string,\n    "value": string | null\n  } | null\n}\n\nWhen disambiguating, leverage spatial context:\n- "the button at the top-right" → use region/relativePosition info\n- "the Apply button for the Software Engineer job" → use contentFor association\n- "the link next to the search box" → use nearbyElements info\n\nExamples of when to ask for clarification:\n- "Click submit" but there are multiple submit buttons in different containers\n- "Fill the form" but there are multiple forms\n- Ambiguous element references that spatial/content context can\'t resolve\n\nExamples of clear commands:\n- "Click the Sign In button" (specific description)\n- "Click Apply on the Software Engineer posting" (content association resolves it)\n- "Fill the email field with test@example.com" (specific target and value)\n- "Scroll down" (simple action)',
+              userMessage: i,
+              maxTokens: 500,
+            }),
+            s = t.match(/\{[\s\S]*\}/);
+          if (!s)
+            return (
+              console.error("[IntentLLM] Failed to parse response:", t),
+              { clear: !0, parsedIntent: { action: "click", target: e } }
+            );
+          const o = JSON.parse(s[0]);
+          return {
+            clear: o.clear,
+            clarificationQuestion: o.clarificationQuestion,
+            clarificationOptions: o.clarificationOptions,
+            parsedIntent: o.parsedIntent,
+          };
+        } catch (t) {
+          return (
+            console.error("[IntentLLM] Error:", t),
+            { clear: !0, parsedIntent: { action: "click", target: e } }
+          );
+        }
+      })(e, y, l);
+      if (((m.intentResult = x), !x.clear))
+        return (
+          (m.stage = "clarification"),
+          {
+            success: !0,
+            message:
+              x.clarificationQuestion ||
+              "Could you please clarify your request?",
+            requiresClarification: !0,
+            clarificationQuestion: x.clarificationQuestion,
+            clarificationOptions: x.clarificationOptions,
+          }
+        );
+      m.stage = "codegen";
+      const v = await (async function (e, t, n, s, o) {
+        const a = n.pageSummary?.text || `Page: ${n.title}`,
+          r = n.spatialGrid?.textRepresentation || "",
+          i = (n.navigationGuide || [])
+            .map((e) => `  ${e.step}. [${e.type}] ${e.description}`)
+            .join("\n"),
+          l = n.elements
+            .map((e) => {
+              const t = [];
+              (e.attributes.id && t.push(`id="${e.attributes.id}"`),
+                e.attributes.className &&
+                  t.push(`class="${e.attributes.className.slice(0, 50)}"`),
+                e.attributes.ariaLabel &&
+                  t.push(`aria-label="${e.attributes.ariaLabel}"`),
+                e.attributes.placeholder &&
+                  t.push(`placeholder="${e.attributes.placeholder}"`),
+                e.attributes.type && t.push(`type="${e.attributes.type}"`),
+                e.attributes.name && t.push(`name="${e.attributes.name}"`),
+                e.attributes.href &&
+                  t.push(`href="${e.attributes.href.slice(0, 80)}"`));
+              const n = `(${e.boundingBox.x},${e.boundingBox.y} ${e.boundingBox.width}x${e.boundingBox.height})`;
+              let s = `[${e.id}] <${e.tagName} ${t.join(" ")}> "${e.text.slice(0, 80)}" ${e.isInteractive ? "(interactive)" : ""} ${n}`;
+              return (
+                e.relativePosition && (s += ` | Pos: ${e.relativePosition}`),
+                e.region && (s += ` [${e.region}]`),
+                e.actionHint && (s += ` | Hint: ${e.actionHint}`),
+                void 0 !== e.importance &&
+                  (s += ` | Imp: ${e.importance.toFixed(2)}`),
+                e.semanticContext?.parentSection &&
+                  ((s += ` | In: <${e.semanticContext.parentSection}>`),
+                  e.semanticContext.parentSectionLabel &&
+                    (s += ` "${e.semanticContext.parentSectionLabel}"`)),
+                e.contentFor &&
+                  (s += ` | FOR: ${e.contentFor.associationText}`),
+                e.nearbyElements &&
+                  e.nearbyElements.length > 0 &&
+                  (s += ` | Near: ${e.nearbyElements
+                    .slice(0, 3)
+                    .map((e) => `${e.direction}: "${e.text}"`)
+                    .join(", ")}`),
+                s
+              );
+            })
+            .join("\n"),
+          u = (n.contentContainers || [])
+            .slice(0, 15)
+            .map((e, t) => {
+              let n = `  ${t + 1}. [${e.containerType}] ${e.fullDescription}`;
+              return (
+                e.actions.length > 0 &&
+                  (n += `\n     Actions: ${e.actions.map((e) => e.description).join("; ")}`),
+                n
+              );
+            })
+            .join("\n"),
+          d = o
+            .slice(-5)
+            .map((e) => `${e.role}: ${e.content}`)
+            .join("\n"),
+          m = `${a}\nURL: ${n.url}\n${n.pageType ? `Page type: ${n.pageType}` : ""}\n${n.primaryAction ? `Primary action: "${n.primaryAction.text}"` : ""}\n${r ? `\n${r}` : ""}\n${i ? `Navigation Guide:\n${i}\n` : ""}\nPage text summary:\n${n.pageText.slice(0, 500)}...\n\nDOM Elements:\n${l}\n${u ? `\nContent Containers:\n${u}` : ""}\n\nRecent conversation:\n${d || "None"}\n\nUser command: "${e}"\nParsed intent: ${JSON.stringify(t)}\n\nGenerate structured actions to accomplish this task. Use element IDs (like "el-5") to reference elements. Use content associations and spatial context to select the correct element.`;
+        try {
+          const e = await c({
+              provider: s.provider,
+              apiKey: s.apiKey,
+              model: s.codeGenModel,
+              systemPrompt:
+                'You are a browser automation assistant. Generate structured actions to accomplish user tasks on web pages.\n\nYou receive:\n1. The user\'s command and parsed intent\n2. An enhanced DOM context with:\n   - Page summary with structure overview, landmarks, and page type\n   - Spatial grid showing element distribution across the viewport\n   - Interactive elements with spatial positions, nearby elements, semantic context, and importance scores\n   - Content containers (cards, list items, products) with titles and associated actions\n   - Navigation guide describing how the page is laid out\n3. Recent conversation history for context\n\nResponse format (JSON):\n{\n  "success": true,\n  "explanation": "Brief explanation of what the action does",\n  "actions": [\n    {\n      "actionType": "click" | "fill" | "scroll" | "navigate" | "extract" | "modify",\n      "selector": "element ID (e.g., \'el-5\') or CSS selector",\n      "code": "action-specific value (see below)",\n      "description": "Human-readable description"\n    }\n  ]\n}\n\nAction types and their fields:\n\n1. "click" - Click an element\n   - selector: Element ID (e.g., "el-5") or CSS selector or text to match\n   - code: Not used (can be empty string)\n\n2. "fill" - Fill a text input or textarea\n   - selector: Element ID or CSS selector for the input\n   - code: The value to fill in\n\n3. "scroll" - Scroll the page\n   - selector: Not used\n   - code: Direction - one of: "up", "down", "top", "bottom"\n\n4. "navigate" - Navigate to a URL\n   - selector: Not used\n   - code: The URL to navigate to (e.g., "youtube.com" or "https://google.com")\n\n5. "extract" - Get content from element\n   - selector: Target element\n   - value: Optional "html", "style", "attributes", or specific attribute name (default: text)\n   - code: Not used\n\n6. "modify" - Apply CSS style modifications\n   - selector: Not used\n   - code: JSON config like {"type": "enlarge-text", "scale": 1.5} or raw CSS string\n\n7. "tab" - Tab and window management\n   - selector: Not used\n   - code: JSON with action like {"action": "close"} or {"action": "new", "url": "..."} \n\n8. "keyboard" - Keyboard input and shortcuts\n   - selector: Element to focus (optional)\n   - code: JSON like {"action": "press", "keys": "Ctrl+A"} or {"action": "type", "text": "..."}\n\n10. "browser" - Browser UI controls & Advanced Tools\n   - selector: Not used\n   - code: JSON like {"action": "print"}, {"action": "searchScripts", "keyword": "applyUrl"}, or {"action": "monitorNetwork", "seconds": 10}\n\nImportant:\n- Use element IDs from the DOM context when available (e.g., "el-5")\n- For clicks, prefer element IDs, then CSS selectors, then text content matching\n- Use content associations to understand what each button/link is FOR (e.g., "Apply" button is for "Software Engineer" job posting)\n- Use spatial context (region, relativePosition, nearbyElements) to resolve ambiguous references like "the button at the top" or "the link next to the search box"\n- Use the page type to understand the page purpose (login, product-listing, form, etc.)\n- Return success: false if the task cannot be accomplished\n- Do NOT generate JavaScript code - only structured actions',
+              userMessage: m,
+              maxTokens: 2e3,
+            }),
+            t = e.match(/\{[\s\S]*\}/);
+          if (!t)
+            return (
+              console.error("[CodeGenLLM] Failed to parse response:", e),
+              {
+                success: !1,
+                actions: [],
+                explanation: "Failed to parse code generation response",
+                error: "Invalid response format",
+              }
+            );
+          const n = JSON.parse(t[0]);
+          if (!n.success)
+            return {
+              success: !1,
+              actions: [],
+              explanation: n.explanation || "Code generation failed",
+              error: n.error || "Unknown error",
+            };
+          const o = [];
+          for (const e of n.actions || [])
+            e.actionType
+              ? o.push({
+                  code: e.code,
+                  selector: e.selector || null,
+                  actionType: e.actionType,
+                  description: e.description || "Action",
+                })
+              : console.warn(
+                  "[CodeGenLLM] Invalid action (missing actionType):",
+                  e,
+                );
+          return {
+            success: o.length > 0,
+            actions: o,
+            explanation: n.explanation || "Generated actions",
+          };
+        } catch (e) {
+          return (
+            console.error("[CodeGenLLM] Error:", e),
+            {
+              success: !1,
+              actions: [],
+              explanation: "Code generation failed",
+              error: e instanceof Error ? e.message : "Unknown error",
+            }
+          );
+        }
+      })(e, x.parsedIntent, y, l, u.getConversationContext());
+      if (((m.codeGenResult = v), !v.success))
+        return {
+          success: !1,
+          message: v.error || "Failed to generate action code",
+        };
+      m.stage = "safety";
+      for (const e of v.actions) {
+        const t = d(e.code, e.actionType);
+        if (((m.safetyResult = t), !t.safe)) {
+          if (t.blocked)
+            return {
+              success: !1,
+              message: `Action blocked for safety: ${t.blockedReason}`,
+            };
+          t.requiresConfirmation &&
+            console.log(
+              "[Pipeline] Action requires confirmation:",
+              t.confirmationMessage,
+            );
+        }
+      }
+      m.stage = "execution";
+      const C = [];
+      let T = !0;
+      const $ = [];
+      for (const e of v.actions) {
+        let n = 0;
+        const s = l.maxRetries;
+        let o;
+        for (; n < s; ) {
+          n++;
+          const a = await h(e, t);
+          if (a.success) {
+            C.push({
+              type: e.actionType,
+              target: e.selector,
+              description: e.description,
+            });
+            $.push(e.description);
+            u.recordAction(
+              { type: e.actionType, description: e.description },
+              !0,
+            );
+            break;
+          } else o = a.error;
+          n < s &&
+            (console.log(`[Pipeline] Retry ${n}/${s}: ${o}`),
+            await new Promise((e) => setTimeout(e, 500)));
+        }
+        n >= s &&
+          o &&
+          ((T = !1),
+          $.push(`Failed: ${e.description} (${o})`),
+          u.recordAction(
+            { type: e.actionType, description: e.description },
+            !1,
+          ));
+      }
+      return (
+        (m.stage = "complete"),
+        { success: T, message: $.join(". ") || "Actions completed", actions: C }
+      );
+    } catch (e) {
+      return (
+        (m.stage = "error"),
+        (m.error = e instanceof Error ? e.message : "Unknown error"),
+        console.error("[Pipeline] Error:", e),
+        { success: !1, message: `Pipeline error: ${m.error}` }
+      );
+    }
+    var p;
+  }
+  p ||
+    (chrome.webRequest.onBeforeRequest.addListener(
+      function (e) {
+        if ("image" === e.type || "stylesheet" === e.type || "font" === e.type)
+          return;
+        const t = {
+          url: e.url,
+          method: e.method,
+          type: e.type,
+          timestamp: Date.now(),
+        };
+        (m.unshift(t), m.length > 50 && m.pop());
+      },
+      { urls: ["<all_urls>"] },
+    ),
+    (p = !0),
+    console.log("[NetworkMonitor] Started monitoring"));
+  class y {
+    constructor(e) {
+      this.session = e;
+    }
+    get id() {
+      return this.session.id;
+    }
+    get tabId() {
+      return this.session.tabId;
+    }
+    get messages() {
+      return this.session.messages;
+    }
+    get domContext() {
+      return this.session.domContext;
+    }
+    get pendingClarification() {
+      return this.session.pendingClarification;
+    }
+    addMessage(e) {
+      (this.session.messages.push(e),
+        this.session.messages.length > 100 &&
+          (this.session.messages = this.session.messages.slice(-50)));
+    }
+    setDOMContext(e) {
+      this.session.domContext = e;
+    }
+    recordAction(e, t) {
+      (this.session.actionHistory.push({
+        action: e,
+        success: t,
+        timestamp: Date.now(),
+      }),
+        this.session.actionHistory.length > 50 &&
+          (this.session.actionHistory = this.session.actionHistory.slice(-30)));
+    }
+    setClarification(e) {
+      this.session.pendingClarification = e;
+    }
+    clearClarification() {
+      this.session.pendingClarification = null;
+    }
+    getRecentActions(e = 5) {
+      return this.session.actionHistory.slice(-e);
+    }
+    getConversationContext(e = 10) {
+      return this.session.messages.slice(-e);
+    }
+  }
+  const x = new (class {
+    constructor() {
+      ((this.sessions = new Map()),
+        (this.maxSessions = 50),
+        (this.sessionTimeout = 18e5));
+    }
+    getOrCreateSession(e) {
+      let t = this.sessions.get(e);
+      return (
+        t
+          ? (t.lastActivityAt = Date.now())
+          : ((t = {
+              id: crypto.randomUUID(),
+              tabId: e,
+              messages: [],
+              domContext: null,
+              actionHistory: [],
+              pendingClarification: null,
+              createdAt: Date.now(),
+              lastActivityAt: Date.now(),
+            }),
+            this.sessions.set(e, t),
+            this.cleanupOldSessions()),
+        new y(t)
+      );
+    }
+    getSession(e) {
+      const t = this.sessions.get(e);
+      return t ? ((t.lastActivityAt = Date.now()), new y(t)) : null;
+    }
+    removeSession(e) {
+      this.sessions.delete(e);
+    }
+    cleanupOldSessions() {
+      const e = Date.now();
+      for (const [t, n] of this.sessions)
+        e - n.lastActivityAt > this.sessionTimeout && this.sessions.delete(t);
+      if (this.sessions.size > this.maxSessions) {
+        const e = [...this.sessions.entries()]
+          .sort((e, t) => e[1].lastActivityAt - t[1].lastActivityAt)
+          .slice(0, this.sessions.size - this.maxSessions);
+        for (const [t] of e) this.sessions.delete(t);
+      }
+    }
+  })();
+  let v = t;
+  async function C() {
+    try {
+      const e = await chrome.storage.local.get([
+        "provider",
+        "apiKey",
+        "intentModel",
+        "codeGenModel",
+        "maxRetries",
+        "confirmDestructive",
+        "audioFeedback",
+        "theme",
+      ]);
+      ((v = { ...t, ...e }), console.log("[Background] Settings loaded"));
+    } catch (e) {
+      console.error("[Background] Failed to load settings:", e);
+    }
+  }
+  (chrome.runtime.onInstalled.addListener(async () => {
+    (console.log("[Background] Extension installed"),
+      await C(),
+      chrome.sidePanel &&
+        chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: !0 }));
+  }),
+    chrome.runtime.onStartup.addListener(async () => {
+      (console.log("[Background] Extension started"), await C());
+    }),
+    chrome.runtime.onMessage.addListener(
+      (t, n, s) => (
+        (async function (t, n) {
+          const s = n.tab?.id;
+          switch (
+            (console.log("[Background] Received message:", t.type), t.type)
+          ) {
+            case e.PING:
+              return { success: !0, data: "pong" };
+            case e.PROCESS_COMMAND:
+              return (async function (e, t) {
+                const { command: n } = e.payload,
+                  s = e.payload.tabId || t;
+                if (!s) return { success: !1, error: "No tab ID available" };
+                if ((v.apiKey || (await C()), !v.apiKey))
+                  return {
+                    success: !1,
+                    error:
+                      "API key not configured. Please set up your API key in the extension settings.",
+                  };
+                try {
+                  const e = x.getOrCreateSession(s);
+                  e.addMessage({
+                    id: crypto.randomUUID(),
+                    role: "user",
+                    content: n,
+                    timestamp: Date.now(),
+                  });
+                  const t = await b(n, s, v, e);
+                  return (
+                    e.addMessage({
+                      id: crypto.randomUUID(),
+                      role: "assistant",
+                      content: t.message,
+                      timestamp: Date.now(),
+                      actions: t.actions,
+                      isError: !t.success,
+                    }),
+                    {
+                      success: t.success,
+                      data: {
+                        message: t.message,
+                        actions: t.actions,
+                        requiresClarification: t.requiresClarification,
+                        clarificationQuestion: t.clarificationQuestion,
+                      },
+                    }
+                  );
+                } catch (e) {
+                  return (
+                    console.error("[Background] Pipeline error:", e),
+                    {
+                      success: !1,
+                      error:
+                        e instanceof Error
+                          ? e.message
+                          : "Pipeline processing failed",
+                    }
+                  );
+                }
+              })(t, s);
+            case e.CLARIFICATION_RESPONSE:
+              return (async function (e, t) {
+                if (!t) return { success: !1, error: "No tab ID available" };
+                const n = x.getSession(t);
+                return n
+                  ? (n.setClarification(e.payload.answer), { success: !0 })
+                  : { success: !1, error: "No active session found" };
+              })(t, s);
+            case e.GET_SETTINGS:
+              return { success: !0, data: v };
+            case e.SETTINGS_UPDATED:
+              return (await C(), { success: !0 });
+            default:
+              return { success: !1, error: `Unknown message type: ${t.type}` };
+          }
+        })(t, n)
+          .then(s)
+          .catch((e) => {
+            (console.error("[Background] Message handling error:", e),
+              s({
+                success: !1,
+                error: e instanceof Error ? e.message : "Unknown error",
+              }));
+          }),
+        !0
+      ),
+    ));
+})();

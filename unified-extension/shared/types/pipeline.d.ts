@@ -29,10 +29,6 @@ export interface GeneratedAction {
     actionType: 'click' | 'fill' | 'scroll' | 'navigate' | 'extract' | 'modify' | 'tab' | 'keyboard' | 'browser';
     description: string;
     value?: string | Record<string, unknown>;
-    verification: {
-        type: 'domChange' | 'navigation' | 'styleChange' | 'none';
-        expectedResult: string;
-    };
 }
 export interface CodeGenResult {
     success: boolean;
@@ -54,28 +50,14 @@ export interface ExecutionResult {
     error?: string;
     actualResult?: string;
 }
-export interface VerificationResult {
-    success: boolean;
-    expectedResult: string;
-    actualResult: string;
-    details?: string;
-}
-export interface RetryContext {
-    attempt: number;
-    maxAttempts: number;
-    previousErrors: string[];
-    originalAction: GeneratedAction;
-    alternativeSelectors?: string[];
-}
 export interface PipelineState {
-    stage: 'idle' | 'fast-path' | 'intent' | 'clarification' | 'codegen' | 'safety' | 'execution' | 'verification' | 'complete' | 'error';
+    stage: 'idle' | 'fast-path' | 'intent' | 'clarification' | 'codegen' | 'safety' | 'execution' | 'complete' | 'error';
     command: string;
     domContext?: SimplifiedDOM;
     intentResult?: IntentAnalysis;
     codeGenResult?: CodeGenResult;
     safetyResult?: SafetyCheckResult;
     executionResult?: ExecutionResult;
-    retryContext?: RetryContext;
     error?: string;
 }
 export type AIProvider = 'claude' | 'openai';
