@@ -506,8 +506,8 @@
 
     console.log(
       "[TTS Filter] Tracking " +
-        ttsTextWords.length +
-        " description words. Filter ACTIVE.",
+      ttsTextWords.length +
+      " description words. Filter ACTIVE.",
     );
   }
 
@@ -569,8 +569,8 @@
     if (normDescription.indexOf(normTranscript) !== -1) {
       console.log(
         '[TTS Filter] LEAKAGE (substring match): "' +
-          transcript.substring(0, 60) +
-          '..."',
+        transcript.substring(0, 60) +
+        '..."',
       );
       return true;
     }
@@ -595,20 +595,20 @@
     if (overlapRatio >= 0.7) {
       console.log(
         "[TTS Filter] LEAKAGE (word overlap " +
-          Math.round(overlapRatio * 100) +
-          '%): "' +
-          transcript.substring(0, 60) +
-          '..."',
+        Math.round(overlapRatio * 100) +
+        '%): "' +
+        transcript.substring(0, 60) +
+        '..."',
       );
       return true;
     }
 
     console.log(
       "[TTS Filter] PASSED (word overlap " +
-        Math.round(overlapRatio * 100) +
-        '%): "' +
-        transcript.substring(0, 60) +
-        '..."',
+      Math.round(overlapRatio * 100) +
+      '%): "' +
+      transcript.substring(0, 60) +
+      '..."',
     );
     return false;
   }
@@ -766,8 +766,8 @@
           // This is a genuine user command — clear the filter and process it
           console.log(
             '[VoiceWorkflow] Genuine command detected: "' +
-              finalTranscript.trim() +
-              '"',
+            finalTranscript.trim() +
+            '"',
           );
           clearPageDescriptionFilter();
           stopSTT();
@@ -1763,11 +1763,12 @@
   // =============================================
 
   var accessibilityToggles = [
+    { dashId: "dash-mode-large-text", storageKey: "mode-large-text" },
     { dashId: "dash-mode-dyslexia", storageKey: "mode-dyslexia" },
     { dashId: "dash-mode-adhd", storageKey: "mode-adhd" },
     { dashId: "dash-mode-contrast", storageKey: "mode-contrast" },
     { dashId: "dash-mode-cognitive", storageKey: "mode-cognitive" },
-    { dashId: "dash-mode-large-text", storageKey: "mode-large-text" },
+
     { dashId: "dash-mode-calm", storageKey: "mode-calm" },
     { dashId: "dash-mode-neuro", storageKey: "mode-neuro" },
     { dashId: "dash-mode-seizure", storageKey: "mode-seizure" },
